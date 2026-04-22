@@ -195,8 +195,22 @@ All write to audit_log."
 
 ---
 
-## PHASE 5 — HR: Participant Management
+## PHASE 5 — HR: Participant Management ✅ COMPLETED
 **Session goal:** HR can create, manage, and bulk import participants (without email initially)
+
+**Completed deliverables:**
+- `src/app/(hr)/participants/actions.ts` — createParticipant, updateParticipant, deactivate, reactivate, resetPw, bulkCreate
+- `src/components/hr/AddParticipantModal.tsx` — manual password entry with confirm, credentials display
+- `src/components/hr/EditParticipantModal.tsx` — edit name/title/func/group
+- `src/components/hr/CSVImportModal.tsx` — file upload, validation preview, bulk import, credentials CSV export
+- `src/components/hr/ParticipantsTable.tsx` — wired up edit/reset/deactivate buttons, status filter, seat usage display
+- `src/app/(hr)/groups/actions.ts` — createGroup, updateGroup, deleteGroup, addParticipantToGroup, removeParticipantFromGroup
+- `src/app/(hr)/groups/page.tsx` — fetch groups + participants
+- `src/components/hr/GroupsManager.tsx` — grid UI with expandable members, add/remove, edit/delete
+- Groups use `group_members` junction table (not a column on users)
+- Seat limit enforcement: checks organizations.seat_limit before creation
+- Audit log entries for all actions
+
 
 ### Steps for Cursor
 

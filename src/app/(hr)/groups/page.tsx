@@ -1,26 +1,36 @@
 // src/app/(hr)/groups/page.tsx
+import { createClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
+import GroupsManager from '@/components/hr/GroupsManager'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Groups' }
 
-export default function GroupsPage() {
+export default async function GroupsPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = await supabase.from('users').select('org_id').eq('id', user!.id).single()
+
+  const [{ data: groups }, { data: participants }] = await Promise.all([
+    supabase
+      .from('groups')
+      .select('*, group_members(user_id)')
+      .eq('org_id', profile?.org_id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('users')
+      .select('id, name, email, avatar_color, avatar_emoji, title')
+      .eq('org_id', profile?.org_id)
+      .eq('role', 'participant')
+      .eq('status', 'active')
+      .order('name'),
+  ])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar title="Groups" />
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="nudge-card rounded-xl p-12 text-center">
-            <div className="text-6xl mb-4">🗂️</div>
-            <h2 className="text-xl font-bold text-brand-dark mb-2">Groups</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Organize participants into groups for targeted skill assignments and reporting.
-            </p>
-            <span className="inline-block text-[10px] font-bold text-brand-purple bg-brand-purple/10 rounded-full px-3 py-1">
-              Coming in Phase 5
-            </span>
-          </div>
-        </div>
+        <GroupsManager groups={groups ?? []} participants={participants ?? []} />
       </main>
     </div>
   )
