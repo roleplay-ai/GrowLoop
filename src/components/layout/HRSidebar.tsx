@@ -12,11 +12,11 @@ interface Props {
 }
 
 const NAV = [
-  { href: '/hr/insights',     icon: '📊', label: 'Insights',     badge: null },
-  { href: '/hr/participants',  icon: '👥', label: 'Participants', badge: null },
-  { href: '/hr/groups',        icon: '🗂️',  label: 'Groups',      badge: null },
-  { href: '/hr/skills',        icon: '🧠', label: 'Skills',      badge: null },
-  { href: '/hr/settings',      icon: '⚙️',  label: 'Settings',    badge: null },
+  { href: '/insights',     icon: '📊', label: 'Insights',     badge: null },
+  { href: '/participants',  icon: '👥', label: 'Participants', badge: null },
+  { href: '/groups',        icon: '🗂️',  label: 'Groups',      badge: null },
+  { href: '/hr-skills',     icon: '🧠', label: 'Skills',      badge: null },
+  { href: '/settings',      icon: '⚙️',  label: 'Settings',    badge: null },
 ]
 
 export default function HRSidebar({ user, org }: Props) {

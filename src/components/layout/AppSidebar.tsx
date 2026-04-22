@@ -17,10 +17,10 @@ interface Props {
 }
 
 const NAV = [
-  { href: '/app/skills',    icon: '🧠', label: 'My Skills',    badge: null },
-  { href: '/app/progress',  icon: '📈', label: 'Progress',     badge: null },
-  { href: '/app/plan',      icon: '✅', label: 'Action Plan',  badge: '3' },
-  { href: '/app/community', icon: '👥', label: 'Community',    badge: null },
+  { href: '/skills',    icon: '🧠', label: 'My Skills',    badge: null },
+  { href: '/progress',  icon: '📈', label: 'Progress',     badge: null },
+  { href: '/plan',      icon: '✅', label: 'Action Plan',  badge: '3' },
+  { href: '/community', icon: '👥', label: 'Community',    badge: null },
 ]
 
 const PHASE_STEPS = [

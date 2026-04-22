@@ -80,7 +80,7 @@ export default async function OrgsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
-                      <a href={`/super-admin/orgs/${org.id}`} className="text-[10px] font-bold text-brand-purple px-2 py-1 rounded hover:bg-brand-purple/5">
+                      <a href={`/orgs/${org.id}`} className="text-[10px] font-bold text-brand-purple px-2 py-1 rounded hover:bg-brand-purple/5">
                         View
                       </a>
                       <button className="text-[10px] font-bold text-muted-foreground px-2 py-1 rounded hover:bg-brand-cream">

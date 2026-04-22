@@ -844,3 +844,15 @@ nudgeable-web/
 - [x] src/components/providers/QueryProvider.tsx (React Query setup)
 - [x] src/components/providers/SessionRefresh.tsx (auth state change listener)
 - [x] Updated root layout with Providers wrapper
+
+## Completed (PHASE 3 — Participant Skills UI ✅)
+
+- [x] src/app/(app)/skills/[skillId]/page.tsx (skill detail/preview page)
+- [x] src/components/skills/SkillPreview.tsx (dimensions accordion, enrollment CTA)
+- [x] src/app/(app)/skills/actions.ts (enrollInSkill server action with audit log)
+- [x] src/app/(app)/skills/[userSkillId]/layout.tsx (tabs layout with header)
+- [x] src/components/skills/SkillTabs.tsx (Chat/Plan/Progress/Intel navigation)
+- [x] src/app/(app)/skills/[userSkillId]/plan/page.tsx (action plan placeholder)
+- [x] src/app/(app)/skills/[userSkillId]/progress/page.tsx (growth view placeholder)
+- [x] src/app/(app)/skills/[userSkillId]/intel/page.tsx (AI intel viewer)
+- [x] Updated SkillsGrid to link to skill detail page for available skills

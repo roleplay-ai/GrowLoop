@@ -18,14 +18,28 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    console.log('Attempting login for:', email)
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+
+    console.log('Auth result:', { data, error: authError })
 
     if (authError) {
+      console.error('Auth error:', authError)
       setError(authError.message)
       setLoading(false)
       return
     }
 
+    if (!data.user) {
+      console.error('No user returned from auth')
+      setError('Login failed - no user returned')
+      setLoading(false)
+      return
+    }
+
+    console.log('Login successful, user:', data.user.id)
+    
     // Middleware will redirect to correct role dashboard
     router.push('/')
     router.refresh()

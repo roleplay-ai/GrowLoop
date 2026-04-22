@@ -5,20 +5,21 @@ import Topbar from '@/components/layout/Topbar'
 import ChatWindow from '@/components/chat/ChatWindow'
 import type { Metadata } from 'next'
 
-interface Props { params: { userSkillId: string } }
+interface Props { params: Promise<{ userSkillId: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: 'Skill Chat' }
 }
 
 export default async function ChatPage({ params }: Props) {
+  const { userSkillId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const { data: userSkill } = await supabase
     .from('user_skills')
     .select('*, skill:skills(id, name, icon, description, dimensions)')
-    .eq('id', params.userSkillId)
+    .eq('id', userSkillId)
     .eq('user_id', user!.id)
     .single()
 
@@ -29,7 +30,7 @@ export default async function ChatPage({ params }: Props) {
     .from('conversations')
     .select('id')
     .eq('user_id', user!.id)
-    .eq('user_skill_id', params.userSkillId)
+    .eq('user_skill_id', userSkillId)
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
@@ -37,7 +38,7 @@ export default async function ChatPage({ params }: Props) {
   if (!conversation) {
     const { data: newConv } = await supabase
       .from('conversations')
-      .insert({ user_id: user!.id, user_skill_id: params.userSkillId, phase: userSkill.phase })
+      .insert({ user_id: user!.id, user_skill_id: userSkillId, phase: userSkill.phase })
       .select('id')
       .single()
     conversation = newConv
@@ -64,7 +65,7 @@ export default async function ChatPage({ params }: Props) {
         }
       />
       <ChatWindow
-        userSkillId={params.userSkillId}
+        userSkillId={userSkillId}
         conversationId={conversation?.id ?? ''}
         initialMessages={messages ?? []}
         skillName={skill?.name}

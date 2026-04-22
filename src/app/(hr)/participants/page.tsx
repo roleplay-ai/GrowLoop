@@ -24,7 +24,7 @@ export default async function ParticipantsPage() {
         title="Participants"
         rightSlot={
           <a
-            href="/hr/participants/new"
+            href="/participants/new"
             className="px-4 py-2 bg-brand-dark text-white text-xs font-black rounded-lg hover:bg-brand-dark/90 transition-colors"
           >
             + Add participant

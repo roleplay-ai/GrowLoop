@@ -3,6 +3,17 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // ── Public routes (no auth required) ────────────────────────────────────
+  const publicRoutes = ['/login', '/peer-survey', '/change-password']
+  const isPublic = publicRoutes.some(p => pathname.startsWith(p))
+
+  if (isPublic) {
+    return NextResponse.next()
+  }
+
+  // ── Protected routes - require Supabase auth ────────────────────────────
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -24,58 +35,74 @@ export async function middleware(request: NextRequest) {
 
   // Refresh session — MUST be called before any auth checks
   const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
 
-  // ── Public routes ───────────────────────────────────────────────────────
-  const publicRoutes = ['/login', '/peer-survey']
-  const isPublic = publicRoutes.some(p => pathname.startsWith(p))
+  console.log('[Middleware] Path:', pathname, '| User:', user?.id ?? 'none')
 
-  if (!user && !isPublic) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  // If no user, redirect to login
+  if (!user) {
+    console.log('[Middleware] No user, redirecting to login')
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (!user) return supabaseResponse
-
   // ── Fetch role from custom users table ─────────────────────────────────
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('users')
     .select('role, must_change_pw')
     .eq('id', user.id)
     .single()
 
+  console.log('[Middleware] Profile:', profile, '| Error:', profileError)
+
   const role = profile?.role
   const mustChange = profile?.must_change_pw
 
+  console.log('[Middleware] Role:', role, '| Must change pw:', mustChange)
+
+  // If no profile found, redirect to login
+  if (!profile || !role) {
+    console.log('[Middleware] No profile/role found, redirecting to login')
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   // Force password change
   if (mustChange && pathname !== '/change-password') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/change-password'
-    return NextResponse.redirect(url)
+    console.log('[Middleware] Must change password, redirecting')
+    return NextResponse.redirect(new URL('/change-password', request.url))
   }
 
   // ── Role guards ─────────────────────────────────────────────────────────
-  if (pathname.startsWith('/super-admin') && role !== 'super_admin') {
+  // Note: (app), (hr), (super-admin) are route groups - parentheses don't appear in URL
+  const superAdminRoutes = ['/orgs', '/admin-skills', '/prompts', '/billing', '/flags', '/audit', '/llm']
+  const hrRoutes = ['/insights', '/participants', '/groups', '/hr-skills', '/settings']
+  const participantRoutes = ['/skills', '/progress', '/plan', '/community']
+
+  if (superAdminRoutes.some(r => pathname.startsWith(r)) && role !== 'super_admin') {
+    console.log('[Middleware] Not super_admin, redirecting to login')
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  if (pathname.startsWith('/hr') && role !== 'hr') {
+  if (hrRoutes.some(r => pathname.startsWith(r)) && role !== 'hr') {
+    console.log('[Middleware] Not hr, redirecting to login')
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  if (pathname.startsWith('/app') && role !== 'participant') {
+  if (participantRoutes.some(r => pathname.startsWith(r)) && role !== 'participant') {
+    console.log('[Middleware] Not participant, redirecting to login')
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   // ── Redirect root to role-specific dashboard ────────────────────────────
   if (pathname === '/') {
     const destinations: Record<string, string> = {
-      super_admin: '/super-admin/orgs',
-      hr:          '/hr/insights',
-      participant: '/app/skills',
+      super_admin: '/orgs',
+      hr:          '/insights',
+      participant: '/skills',
     }
+    console.log('[Middleware] At root, role is:', role, '| Redirecting to:', destinations[role])
     if (role && destinations[role]) {
       return NextResponse.redirect(new URL(destinations[role], request.url))
     }
+    // If no role, go to login
+    console.log('[Middleware] No valid role for redirect, going to login')
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   return supabaseResponse

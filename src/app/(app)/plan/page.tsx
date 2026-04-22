@@ -1,0 +1,24 @@
+// src/app/(app)/plan/page.tsx
+import Topbar from '@/components/layout/Topbar'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'Action Plan' }
+
+export default function PlanPage() {
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <Topbar title="Action Plan" />
+      <main className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-12 text-center">
+            <div className="text-6xl mb-4">✅</div>
+            <h2 className="text-2xl font-bold text-brand-dark mb-2">Action Plan</h2>
+            <p className="text-brand-dark/50">
+              Coming soon! Your personalized action items will appear here.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

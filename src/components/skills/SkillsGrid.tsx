@@ -2,8 +2,6 @@
 // src/components/skills/SkillsGrid.tsx
 import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import type { UserSkill, Skill } from '@/lib/types'
 
 interface Props {
@@ -23,7 +21,7 @@ function SkillCard({ us }: { us: UserSkill }) {
 
   return (
     <Link
-      href={`/app/skills/${us.id}/chat`}
+      href={`/skills/${us.id}/chat`}
       className="nudge-card rounded-xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group block"
     >
       {/* Header */}
@@ -112,26 +110,6 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 
 export default function SkillsGrid({ userSkills, availableSkills }: Props) {
   const [showPicker, setShowPicker] = useState(false)
-  const [enrolling, setEnrolling]   = useState<string | null>(null)
-  const router   = useRouter()
-  const supabase = createClient()
-
-  async function enroll(skillId: string) {
-    setEnrolling(skillId)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile }  = await supabase.from('users').select('org_id').eq('id', user!.id).single()
-
-    await supabase.from('user_skills').insert({
-      user_id:  user!.id,
-      skill_id: skillId,
-      org_id:   profile?.org_id,
-      phase:    'pre',
-    })
-
-    setEnrolling(null)
-    setShowPicker(false)
-    router.refresh()
-  }
 
   if (userSkills.length === 0 && !showPicker) {
     return <EmptyState onAdd={() => setShowPicker(true)} />
@@ -175,11 +153,10 @@ export default function SkillsGrid({ userSkills, availableSkills }: Props) {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {availableSkills.map(skill => (
-                <button
+                <Link
                   key={skill.id}
-                  onClick={() => enroll(skill.id)}
-                  disabled={enrolling === skill.id}
-                  className="nudge-card rounded-xl p-4 text-left hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50"
+                  href={`/skills/explore/${skill.id}`}
+                  className="nudge-card rounded-xl p-4 text-left hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 block"
                 >
                   <div className="flex items-center gap-2.5 mb-2">
                     <span className="text-xl">{skill.icon ?? '🧠'}</span>
@@ -187,9 +164,9 @@ export default function SkillsGrid({ userSkills, availableSkills }: Props) {
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2">{skill.description}</p>
                   <div className="mt-3 text-xs font-bold text-brand-purple">
-                    {enrolling === skill.id ? 'Adding…' : 'Start learning →'}
+                    View details →
                   </div>
-                </button>
+                </Link>
               ))}
             </div>
           )}

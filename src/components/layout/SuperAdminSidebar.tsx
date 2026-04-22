@@ -9,13 +9,13 @@ import type { User } from '@/lib/types'
 interface Props { user: User }
 
 const NAV = [
-  { href: '/super-admin/orgs',     icon: '🏢', label: 'Organizations', badge: null },
-  { href: '/super-admin/skills',   icon: '🧠', label: 'Skills Library', badge: null },
-  { href: '/super-admin/prompts',  icon: '🤖', label: 'AI Prompts',     badge: null },
-  { href: '/super-admin/billing',  icon: '💳', label: 'Billing',        badge: null },
-  { href: '/super-admin/flags',    icon: '🚩', label: 'Feature Flags',  badge: null },
-  { href: '/super-admin/audit',    icon: '📋', label: 'Audit Log',      badge: null },
-  { href: '/super-admin/llm',      icon: '⚡', label: 'LLM Usage',      badge: null },
+  { href: '/orgs',         icon: '🏢', label: 'Organizations', badge: null },
+  { href: '/admin-skills', icon: '🧠', label: 'Skills Library', badge: null },
+  { href: '/prompts',      icon: '🤖', label: 'AI Prompts',     badge: null },
+  { href: '/billing',      icon: '💳', label: 'Billing',        badge: null },
+  { href: '/flags',        icon: '🚩', label: 'Feature Flags',  badge: null },
+  { href: '/audit',        icon: '📋', label: 'Audit Log',      badge: null },
+  { href: '/llm',          icon: '⚡', label: 'LLM Usage',      badge: null },
 ]
 
 export default function SuperAdminSidebar({ user }: Props) {
