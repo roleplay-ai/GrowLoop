@@ -856,3 +856,13 @@ nudgeable-web/
 - [x] src/app/(app)/skills/[userSkillId]/progress/page.tsx (growth view placeholder)
 - [x] src/app/(app)/skills/[userSkillId]/intel/page.tsx (AI intel viewer)
 - [x] Updated SkillsGrid to link to skill detail page for available skills
+
+## Completed (PHASE 4 — Super Admin: Org & HR Provisioning ✅)
+
+- [x] src/app/(super-admin)/orgs/actions.ts (createOrg, updateOrg, suspendOrg, reactivateOrg)
+- [x] src/components/super-admin/CreateOrgModal.tsx (dark modal with auto-slug)
+- [x] src/app/(super-admin)/orgs/OrgsTable.tsx (client component with actions)
+- [x] src/app/(super-admin)/orgs/[id]/page.tsx (org detail with stats)
+- [x] src/app/(super-admin)/orgs/[id]/hr/page.tsx (HR management page)
+- [x] src/app/(super-admin)/orgs/[id]/hr/actions.ts (createHR, resetHRPassword, deactivateHR, reactivateHR)
+- [x] src/app/(super-admin)/orgs/[id]/hr/HRManagement.tsx (table with credentials modal)
