@@ -102,12 +102,56 @@ This prevents stale sessions after token expiry."
 
 ---
 
-## PHASE 3 — Super Admin: Org & HR Provisioning
-**Session goal:** Super Admin can create orgs and provision HR accounts with email credentials
+## PHASE 3 — Participant Skills UI
+**Session goal:** Participants can browse skills, view details, and enroll
 
 ### Steps for Cursor
 
-**3.1 Create org server action**
+**3.1 Skill detail page**
+```
+Prompt: "Build src/app/(app)/skills/[skillId]/page.tsx — a 'skill preview' page before enrollment:
+1. Skill name, icon, description
+2. 'Why this matters' section (from skill.description)
+3. Dimensions accordion — show each dimension with its rubric levels
+4. 'Start this skill' CTA → calls enroll action → redirects to /app/skills/[userSkillId]/chat
+5. 'Already enrolled' state if user has this skill"
+```
+
+**3.2 Enroll in skill action**
+```
+Prompt: "Create src/app/(app)/skills/actions.ts:
+1. enrollInSkill(skillId): creates user_skills row with phase='pre', is_active=true
+2. Validates skill is enabled for user's org (check org_skills table)
+3. Returns the new userSkillId
+4. Write to audit_log"
+```
+
+**3.3 My skills dashboard**
+```
+Prompt: "Enhance src/app/(app)/skills/page.tsx:
+1. Two sections: 'My Skills' (enrolled) and 'Explore Skills' (available)
+2. My Skills shows progress: phase badge, last activity, peer score if available
+3. Explore Skills shows org-enabled skills user hasn't enrolled in yet
+4. Empty state for new users: 'Pick your first skill to start growing'"
+```
+
+**3.4 Skill navigation tabs**
+```
+Prompt: "Build src/app/(app)/skills/[userSkillId]/layout.tsx:
+1. Tabs: Chat | Plan | Progress | Intel
+2. Breadcrumb: Skills > [Skill Name]
+3. Phase badge in header (pre/training/post)
+4. Active tab styling with brand-purple underline"
+```
+
+---
+
+## PHASE 4 — Super Admin: Org & HR Provisioning
+**Session goal:** Super Admin can create orgs and provision HR accounts (without email initially)
+
+### Steps for Cursor
+
+**4.1 Create org server action**
 ```
 Prompt: "Create src/app/(super-admin)/orgs/actions.ts with server actions:
 1. createOrg(formData): validates with zod, inserts into organizations, writes audit_log
@@ -117,7 +161,7 @@ Prompt: "Create src/app/(super-admin)/orgs/actions.ts with server actions:
 All actions use createServiceClient() (service role) and check caller is super_admin."
 ```
 
-**3.2 Create org modal**
+**4.2 Create org modal**
 ```
 Prompt: "Build src/components/super-admin/CreateOrgModal.tsx:
 - Dialog triggered by '+ New org' button on /super-admin/orgs
@@ -128,7 +172,7 @@ Prompt: "Build src/components/super-admin/CreateOrgModal.tsx:
 - Matches Nudgeable brand: dark background card, yellow accents"
 ```
 
-**3.3 HR provisioning**
+**4.3 HR provisioning**
 ```
 Prompt: "Create src/app/(super-admin)/orgs/[id]/hr/page.tsx and actions:
 1. Page: lists HR users for this org, shows their status and last active
@@ -136,56 +180,45 @@ Prompt: "Create src/app/(super-admin)/orgs/[id]/hr/page.tsx and actions:
    a. Generate random 12-char password (uppercase + lowercase + digits)
    b. Call supabase.auth.admin.createUser({ email, password, email_confirm: true })
    c. Insert into users table: role='hr', org_id, plain_password, must_change_pw=true
-   d. Call SendGrid template 'account_invite' with { email, password, login_url, org_name }
-   e. Insert into email_log
-   f. Insert into audit_log
+   d. Insert into audit_log
+   e. Show generated credentials in modal (email sent in Phase 11)
 3. CreateHRModal component: name, email fields"
 ```
 
-**3.4 SendGrid email service**
-```
-Prompt: "Create src/lib/email.ts:
-1. sendEmail({ to, template, payload }) — calls SendGrid /mail/send API
-2. Template IDs as constants: ACCOUNT_INVITE, PEER_INVITE, NUDGE_EMAIL, REMINDER
-3. Each send inserts into email_log via service role client
-4. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL to .env.local.example
-5. Gracefully handles SendGrid errors — never throws, just logs"
-```
-
-**3.5 Resend / Reset password actions**
+**4.4 Password management actions**
 ```
 Prompt: "Add to the HR user management:
-1. resendWelcomeEmail(userId): regenerates password, updates users.plain_password, re-calls SendGrid
-2. resetPassword(userId): same as above but triggered from 'Reset password' button
-3. deactivateHR(userId): sets status='inactive'
+1. resetPassword(userId): regenerates password, updates users.plain_password, shows in modal
+2. deactivateHR(userId): sets status='inactive'
 All write to audit_log."
 ```
 
 ---
 
-## PHASE 4 — HR: Participant Management
-**Session goal:** HR can invite, manage, and bulk import participants
+## PHASE 5 — HR: Participant Management
+**Session goal:** HR can create, manage, and bulk import participants (without email initially)
 
 ### Steps for Cursor
 
-**4.1 Participant create action**
+**5.1 Participant create action**
 ```
 Prompt: "Create src/app/(hr)/participants/actions.ts:
-1. createParticipant(formData): mirrors Phase 3 HR provisioning but role='participant'
+1. createParticipant(formData): mirrors Phase 4 HR provisioning but role='participant'
 2. Validate seat limit not exceeded (check organizations.seat_limit vs active participant count)
-3. Send account_invite email
-4. Write audit_log"
+3. Write audit_log
+4. Return generated credentials to show in modal"
 ```
 
-**4.2 Add participant modal**
+**5.2 Add participant modal**
 ```
 Prompt: "Build src/components/hr/AddParticipantModal.tsx:
 - Fields: Full name, Email, Title/Role (optional), Function (optional), Group (dropdown of org groups)
 - On submit calls createParticipant server action
+- Shows generated password in success state (can copy)
 - Shows toast on success"
 ```
 
-**4.3 CSV bulk import**
+**5.3 CSV bulk import**
 ```
 Prompt: "Build src/components/hr/CSVImportModal.tsx:
 1. File upload (accept .csv) — parse client-side with papaparse
@@ -193,20 +226,20 @@ Prompt: "Build src/components/hr/CSVImportModal.tsx:
 3. Expected columns: name, email, title, func, group_name
 4. 'Import' button calls src/app/(hr)/participants/actions.ts bulkCreateParticipants()
 5. bulkCreateParticipants: loops through validated rows, calls createParticipant for each
-6. Returns { created, failed, errors[] }
-7. Show summary toast after import"
+6. Returns { created, failed, errors[], credentials[] }
+7. Show summary with downloadable credentials CSV"
 ```
 
-**4.4 Edit + deactivate participant**
+**5.4 Edit + deactivate participant**
 ```
 Prompt: "Add to ParticipantsTable:
 1. Edit modal: editable fields name, title, func — calls updateParticipant server action
 2. Deactivate: sets status='inactive' and is_active=false on all their user_skills
-3. Resend invite: calls resendWelcomeEmail
+3. Reset password: regenerates and shows new password
 All rows in ParticipantsTable should have action buttons wired up."
 ```
 
-**4.5 Groups management page**
+**5.5 Groups management page**
 ```
 Prompt: "Build src/app/(hr)/groups/page.tsx:
 1. List groups with member count
@@ -218,12 +251,12 @@ Prompt: "Build src/app/(hr)/groups/page.tsx:
 
 ---
 
-## PHASE 5 — Skills Library
-**Session goal:** Super Admin manages platform skills; HR clones/customizes; participants browse and enroll
+## PHASE 6 — Skills Library (Admin)
+**Session goal:** Super Admin manages platform skills; HR clones/customizes for org
 
 ### Steps for Cursor
 
-**5.1 Super Admin skills page**
+**6.1 Super Admin skills page**
 ```
 Prompt: "Build src/app/(super-admin)/skills/page.tsx:
 1. Grid of platform skills with name, icon, dimension count, usage count
@@ -234,7 +267,7 @@ Prompt: "Build src/app/(super-admin)/skills/page.tsx:
 All mutations in src/app/(super-admin)/skills/actions.ts"
 ```
 
-**5.2 HR skills page**
+**6.2 HR skills page**
 ```
 Prompt: "Build src/app/(hr)/skills/page.tsx:
 1. Split view: Platform Skills (read-only) | Our Skills (org-scoped)
@@ -244,24 +277,14 @@ Prompt: "Build src/app/(hr)/skills/page.tsx:
 5. 'Feature this skill' toggle (recommended to participants)"
 ```
 
-**5.3 Skill detail page for participants**
-```
-Prompt: "Build src/app/(app)/skills/[skillId]/page.tsx — a 'skill preview' page before enrollment:
-1. Skill name, icon, description
-2. 'Why this matters' section (from skill.description)
-3. Dimensions accordion — show each dimension with its rubric levels
-4.'Start this skill' CTA → calls enroll action → redirects to /app/skills/[userSkillId]/chat
-5. 'Already enrolled' state if user has this skill"
-```
-
 ---
 
-## PHASE 6 — Chatbot: Onboarding Phase
+## PHASE 7 — Chatbot: Onboarding Phase
 **Session goal:** Full onboarding conversation that captures Agent Intel
 
 ### Steps for Cursor
 
-**6.1 Enhance chat API with Agent Intel capture**
+**7.1 Enhance chat API with Agent Intel capture**
 ```
 Prompt: "Update src/app/api/chat/route.ts:
 1. After every 6th assistant message in the 'pre' phase, call a separate LLM summarization:
@@ -273,7 +296,7 @@ Prompt: "Update src/app/api/chat/route.ts:
 3. If ready: update user_skills.phase = 'training' and return a header 'X-Phase-Changed: training'"
 ```
 
-**6.2 Chat page phase transition UI**
+**7.2 Chat page phase transition UI**
 ```
 Prompt: "Update src/components/chat/ChatWindow.tsx:
 1. Listen for 'X-Phase-Changed' header in the fetch response
@@ -283,7 +306,7 @@ Prompt: "Update src/components/chat/ChatWindow.tsx:
 4. The phase badge in Topbar should update reactively"
 ```
 
-**6.3 Agent Intel viewer for participant**
+**7.3 Agent Intel viewer for participant**
 ```
 Prompt: "Build src/app/(app)/skills/[userSkillId]/intel/page.tsx:
 1. Shows what the AI has learned about the participant for this skill
@@ -295,22 +318,23 @@ Prompt: "Build src/app/(app)/skills/[userSkillId]/intel/page.tsx:
 
 ---
 
-## PHASE 7 — Reality Check (Peer Invites + Ratings)
-**Session goal:** Full RC round from peer selection to results display
+## PHASE 8 — Reality Check UI
+**Session goal:** Full RC round UI — peer selection, self-rating, results display
 
 ### Steps for Cursor
 
-**7.1 Peer selection UI in chat**
+**8.1 Peer selection UI in chat**
 ```
 Prompt: "When phase='training', after the AI explains the Reality Check, show an inline peer-selection form inside the chat:
 - Component: src/components/chat/PeerSelectForm.tsx
 - Fields: peer name, peer email, relationship (Manager/Peer/Report/Cross-functional)
 - Add up to 8 peers, min 3
 - 'Send invites' button → calls src/app/api/reality-check/start/route.ts
-- API creates reality_check_rounds row, creates peer_invites rows, sends emails via sendEmail()"
+- API creates reality_check_rounds row, creates peer_invites rows (email sending added in Phase 11)
+- Show 'Invite link copied' option for manual sharing"
 ```
 
-**7.2 Peer survey page (anonymous, no login)**
+**8.2 Peer survey page (anonymous, no login)**
 ```
 Prompt: "Build src/app/peer-survey/[token]/page.tsx:
 1. Public page — no auth required
@@ -320,11 +344,10 @@ Prompt: "Build src/app/peer-survey/[token]/page.tsx:
 5. Open text comment field
 6. Submit → insert peer_ratings, update peer_invites.status='submitted', peer_invites.submitted_at=now()
 7. Confirmation screen: 'Thanks! Your feedback has been submitted anonymously.'
-8. Rate limit: 1 submission per token (enforced by unique constraint on peer_ratings.peer_invite_id)
-9. Add hCaptcha or Cloudflare Turnstile for bot protection"
+8. Rate limit: 1 submission per token (enforced by unique constraint on peer_ratings.peer_invite_id)"
 ```
 
-**7.3 Self-rating flow**
+**8.3 Self-rating flow**
 ```
 Prompt: "Build src/components/chat/SelfRatingForm.tsx:
 - Shown in chat when training phase is active and RC round exists
@@ -333,7 +356,7 @@ Prompt: "Build src/components/chat/SelfRatingForm.tsx:
 - After submit, chat continues with AI reflection"
 ```
 
-**7.4 Round close + score computation**
+**8.4 Round close + score computation**
 ```
 Prompt: "Create src/app/api/reality-check/close/route.ts (POST, authenticated):
 1. Input: { userSkillId }
@@ -346,7 +369,7 @@ Prompt: "Create src/app/api/reality-check/close/route.ts (POST, authenticated):
 8. Trigger action plan generation (call /api/action-plan/generate)"
 ```
 
-**7.5 Results display**
+**8.5 Results display**
 ```
 Prompt: "Build src/app/(app)/skills/[userSkillId]/results/page.tsx:
 1. Score comparison: self vs peer per dimension (radar or bar chart with recharts)
@@ -359,12 +382,12 @@ Use the brand palette — purple for peer bars, orange for self."
 
 ---
 
-## PHASE 8 — Action Plan + Nudges
-**Session goal:** AI generates action plan; participant completes actions; nudge emails fire
+## PHASE 9 — Action Plan UI
+**Session goal:** AI generates action plan; participant completes actions; in-app nudges
 
 ### Steps for Cursor
 
-**8.1 Action plan generation API**
+**9.1 Action plan generation API**
 ```
 Prompt: "Create src/app/api/action-plan/generate/route.ts:
 1. Input: { userSkillId }
@@ -374,7 +397,7 @@ Prompt: "Create src/app/api/action-plan/generate/route.ts:
 5. Log to llm_usage"
 ```
 
-**8.2 Action plan page**
+**9.2 Action plan page**
 ```
 Prompt: "Build src/app/(app)/plan/page.tsx and src/app/(app)/skills/[userSkillId]/plan/page.tsx:
 1. Card per action: title, what/why/how expandable, difficulty dots, due date
@@ -386,21 +409,7 @@ Prompt: "Build src/app/(app)/plan/page.tsx and src/app/(app)/skills/[userSkillId
 7. 'Ask coach to adjust plan' → opens chat with pre-filled message"
 ```
 
-**8.3 Nudge email cron**
-```
-Prompt: "Create supabase/functions/nudge-cron/index.ts (Supabase Edge Function):
-1. Runs daily at 9am per user's timezone (use users.timezone or default UTC)
-2. Finds participants with pending actions and no activity in the last nudge_cadence days
-3. For each, sends a nudge email via SendGrid with:
-   - The next pending action title
-   - A motivational message
-   - Deep link to /app/skills/[userSkillId]/plan
-4. Updates email_log
-5. Deploy with: supabase functions deploy nudge-cron
-6. Schedule with pg_cron in a migration: SELECT cron.schedule('nudge-daily', '0 9 * * *', ...)"
-```
-
-**8.4 In-app nudge cards**
+**9.3 In-app nudge cards**
 ```
 Prompt: "Build src/components/shared/NudgeCard.tsx:
 - Shown on the participant dashboard when an action is overdue
@@ -411,12 +420,12 @@ Prompt: "Build src/components/shared/NudgeCard.tsx:
 
 ---
 
-## PHASE 9 — Re-Survey & Growth Comparison
+## PHASE 10 — Re-Survey & Growth Comparison
 **Session goal:** Participant runs a second RC round and sees before/after comparison
 
 ### Steps for Cursor
 
-**9.1 Trigger re-survey**
+**10.1 Trigger re-survey**
 ```
 Prompt: "Add 'Run new Reality Check' button to the plan page (visible when phase='post' and it's been 30+ days since last round):
 - Button → calls API to create a new reality_check_rounds row (round_number++)
@@ -424,7 +433,7 @@ Prompt: "Add 'Run new Reality Check' button to the plan page (visible when phase
 - Navigates to chat to restart peer selection flow"
 ```
 
-**9.2 Growth comparison view**
+**10.2 Growth comparison view**
 ```
 Prompt: "Build src/app/(app)/skills/[userSkillId]/growth/page.tsx:
 1. Fetch all completed reality_check_rounds for this user_skill, ordered by round_number
@@ -436,12 +445,60 @@ Prompt: "Build src/app/(app)/skills/[userSkillId]/growth/page.tsx:
 
 ---
 
-## PHASE 10 — HR Insights Dashboard (Full)
+## PHASE 11 — SendGrid Email Integration
+**Session goal:** All email features — account invites, peer invites, nudges, broadcasts
+
+### Steps for Cursor
+
+**11.1 SendGrid email service**
+```
+Prompt: "Create src/lib/email.ts:
+1. sendEmail({ to, template, payload }) — calls SendGrid /mail/send API
+2. Template IDs as constants: ACCOUNT_INVITE, PEER_INVITE, NUDGE_EMAIL, REMINDER
+3. Each send inserts into email_log via service role client
+4. Add SENDGRID_API_KEY and SENDGRID_FROM_EMAIL to .env.local.example
+5. Gracefully handles SendGrid errors — never throws, just logs"
+```
+
+**11.2 Account invite emails**
+```
+Prompt: "Update HR and participant creation actions to send welcome emails:
+1. After creating user, call sendEmail with account_invite template
+2. Include: email, temporary password, login URL, org name
+3. Add 'Resend invite' button to HR and Participant tables
+4. resendWelcomeEmail action: regenerates password, sends email, updates plain_password"
+```
+
+**11.3 Peer invite emails**
+```
+Prompt: "Update reality-check/start API to send peer invite emails:
+1. For each peer_invite created, call sendEmail with peer_invite template
+2. Include: peer name, participant name (first name only), skill name, survey URL with token
+3. Add reminder capability: button in participant's RC status view to resend"
+```
+
+**11.4 Nudge email cron**
+```
+Prompt: "Create supabase/functions/nudge-cron/index.ts (Supabase Edge Function):
+1. Runs daily at 9am per user's timezone (use users.timezone or default UTC)
+2. Finds participants with pending actions and no activity in the last nudge_cadence days
+3. For each, sends a nudge email via SendGrid with:
+   - The next pending action title
+   - A motivational message
+   - Deep link to /app/skills/[userSkillId]/plan
+4. Updates email_log
+5. Deploy with: supabase functions deploy nudge-cron
+6. Schedule with pg_cron in a migration"
+```
+
+---
+
+## PHASE 12 — HR Insights Dashboard (Full)
 **Session goal:** HR dashboard fully matches the HTML prototype with live data
 
 ### Steps for Cursor
 
-**10.1 Nightly insights cron**
+**12.1 Nightly insights cron**
 ```
 Prompt: "Create supabase/functions/generate-insights/index.ts:
 1. Runs nightly at 2am UTC
@@ -454,7 +511,7 @@ Prompt: "Create supabase/functions/generate-insights/index.ts:
 3. Log to llm_usage (feature='insights')"
 ```
 
-**10.2 Skill insights drill-down**
+**12.2 Skill insights drill-down**
 ```
 Prompt: "Build src/app/(hr)/insights/[skillId]/page.tsx:
 1. Fetches skill_insights for this skill + all participants enrolled in this skill (with scores)
@@ -464,7 +521,7 @@ Prompt: "Build src/app/(hr)/insights/[skillId]/page.tsx:
 5. Export CSV button — generates CSV of the visible rows"
 ```
 
-**10.3 HR broadcast messaging**
+**12.3 HR broadcast messaging**
 ```
 Prompt: "Build src/app/(hr)/settings/broadcast/page.tsx:
 1. Rich text message area (markdown supported)
@@ -477,12 +534,12 @@ Prompt: "Build src/app/(hr)/settings/broadcast/page.tsx:
 
 ---
 
-## PHASE 11 — Knowledge Base (RAG)
+## PHASE 13 — Knowledge Base (RAG)
 **Session goal:** Chatbot cites curated KB content in coaching responses
 
 ### Steps for Cursor
 
-**11.1 KB upload UI (Super Admin)**
+**13.1 KB upload UI (Super Admin)**
 ```
 Prompt: "Build src/app/(super-admin)/kb/page.tsx:
 1. Upload PDF or DOCX → upload to Supabase Storage bucket 'knowledge-base'
@@ -492,7 +549,7 @@ Prompt: "Build src/app/(super-admin)/kb/page.tsx:
 5. Status column: pending / processing / ready / error"
 ```
 
-**11.2 KB processing API**
+**13.2 KB processing API**
 ```
 Prompt: "Create src/app/api/kb/process/route.ts:
 1. Download file from Storage or fetch URL content
@@ -503,7 +560,7 @@ Prompt: "Create src/app/api/kb/process/route.ts:
 6. Create ivfflat index on embedding vector_cosine_ops"
 ```
 
-**11.3 RAG retrieval in chat**
+**13.3 RAG retrieval in chat**
 ```
 Prompt: "Update src/app/api/chat/route.ts to add RAG:
 1. Before generating a response, call a retrieveContext() function
@@ -517,12 +574,12 @@ Prompt: "Update src/app/api/chat/route.ts to add RAG:
 
 ---
 
-## PHASE 12 — Community Rooms (Optional)
+## PHASE 14 — Community Rooms (Optional)
 **Session goal:** Basic skill rooms with posts and reactions
 
 ### Steps for Cursor
 
-**12.1 Community page**
+**14.1 Community page**
 ```
 Prompt: "Build src/app/(app)/community/page.tsx:
 1. List of skill rooms (one per skill the org has enabled)
@@ -530,7 +587,7 @@ Prompt: "Build src/app/(app)/community/page.tsx:
 3. Click → /app/community/[skillId]"
 ```
 
-**12.2 Skill room**
+**14.2 Skill room**
 ```
 Prompt: "Build src/app/(app)/community/[skillId]/page.tsx:
 1. Post feed: author emoji/color, anonymized name (e.g. 'Purple Penguin'), time, body
@@ -542,12 +599,12 @@ Prompt: "Build src/app/(app)/community/[skillId]/page.tsx:
 
 ---
 
-## PHASE 13 — Billing, Observability, Polish
+## PHASE 15 — Billing, Observability, Polish
 **Session goal:** Stripe, error tracking, analytics, accessibility
 
 ### Steps for Cursor
 
-**13.1 Stripe integration**
+**15.1 Stripe integration**
 ```
 Prompt: "Integrate Stripe for plan upgrades:
 1. src/app/api/billing/checkout/route.ts — creates Stripe Checkout session
@@ -556,7 +613,7 @@ Prompt: "Integrate Stripe for plan upgrades:
 4. Add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET to .env.local.example"
 ```
 
-**13.2 Error tracking + analytics**
+**15.2 Error tracking + analytics**
 ```
 Prompt: "Add observability:
 1. Install @sentry/nextjs, run npx @sentry/wizard@latest -i nextjs
@@ -566,7 +623,7 @@ Prompt: "Add observability:
 5. Add SENTRY_DSN and NEXT_PUBLIC_POSTHOG_KEY to .env.local.example"
 ```
 
-**13.3 Accessibility audit**
+**15.3 Accessibility audit**
 ```
 Prompt: "Do an accessibility pass on all pages:
 1. Add aria-labels to all icon-only buttons
@@ -577,7 +634,7 @@ Prompt: "Do an accessibility pass on all pages:
 6. Test keyboard navigation through sidebar"
 ```
 
-**13.4 Dark mode**
+**15.4 Dark mode**
 ```
 Prompt: "Add dark mode support:
 1. Extend tailwind.config.ts colors with dark mode variants using CSS variables
@@ -589,12 +646,12 @@ Prompt: "Add dark mode support:
 
 ---
 
-## PHASE 14 — Launch Prep
+## PHASE 16 — Launch Prep
 **Session goal:** Production-ready
 
 ### Steps for Cursor
 
-**14.1 GDPR endpoints**
+**16.1 GDPR endpoints**
 ```
 Prompt: "Build GDPR compliance endpoints:
 1. GET /api/gdpr/export — returns all user data as JSON (messages, skills, actions, intel)
@@ -603,7 +660,7 @@ Prompt: "Build GDPR compliance endpoints:
 4. Both require re-authentication (prompt for password before proceeding)"
 ```
 
-**14.2 Load testing**
+**16.2 Load testing**
 ```
 Prompt: "Write a k6 load test script tests/load/chat.js:
 1. 50 virtual users
@@ -613,7 +670,7 @@ Prompt: "Write a k6 load test script tests/load/chat.js:
 5. Run with: k6 run tests/load/chat.js"
 ```
 
-**14.3 Security headers**
+**16.3 Security headers**
 ```
 Prompt: "Add security hardening:
 1. Add security headers to next.config.ts: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
@@ -622,7 +679,7 @@ Prompt: "Add security hardening:
 4. Ensure ANTHROPIC_API_KEY and SUPABASE_SERVICE_ROLE_KEY are never exposed to client"
 ```
 
-**14.4 PWA setup**
+**16.4 PWA setup**
 ```
 Prompt: "Configure PWA:
 1. Create public/manifest.json with Nudgeable branding (name, icons, theme_color=#FFCE00)
@@ -777,3 +834,13 @@ nudgeable-web/
 - [x] Updated index.ts to re-export database types
 - [x] tests/rls.test.ts (RLS verification for all 3 roles)
 - [x] npm scripts: db:setup, db:seed-users, test:rls
+
+## Completed (PHASE 2 — Auth Flows ✅)
+
+- [x] Removed "Forgot password" link from login (HR manages passwords)
+- [x] Updated middleware public routes
+- [x] src/app/change-password/page.tsx (force password change when must_change_pw=true)
+- [x] src/lib/hooks/useUser.ts (React Query-based user hook with role helpers)
+- [x] src/components/providers/QueryProvider.tsx (React Query setup)
+- [x] src/components/providers/SessionRefresh.tsx (auth state change listener)
+- [x] Updated root layout with Providers wrapper
