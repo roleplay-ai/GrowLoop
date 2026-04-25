@@ -1,11 +1,22 @@
 'use client'
 // src/components/chat/ChatWindow.tsx
+//
+// Pure AI-driven chat. Haiku handles the conversation end-to-end and
+// records intel inline via the `record_intel_slot` tool. This component
+// only:
+//   * streams the visible text reply
+//   * after each completed turn, refetches the structured profile so the
+//     side-panel reflects whatever the model just saved
+//   * stays in sync with side-panel edits via the `agent-intel:update`
+//     event bus
+
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/types'
 import { Send, Sparkles, Square, AlertTriangle, X } from 'lucide-react'
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
+import type { IntelProfile } from '@/lib/agent/slots'
 
 interface Props {
   userSkillId: string
@@ -14,6 +25,7 @@ interface Props {
   skillName: string
   skillIcon?: string
   phase: 'pre' | 'training' | 'post'
+  initialProfile?: IntelProfile
 }
 
 const PHASE_META = {
@@ -22,12 +34,12 @@ const PHASE_META = {
     color: 'bg-brand-orange/15 text-brand-orange border-brand-orange/30',
     dot: 'bg-brand-orange',
     greeting:
-      "Hi! I'm **Nudge**, your AI coach for this skill. Let's start by getting to know where you are today. \n\nHow would you describe your **current level** with this skill?",
+      "Hi! I'm **Nudge**, your AI coach for this skill. Tell me a bit about yourself and what you're hoping to get out of it.",
     suggestions: [
-      "I'm a complete beginner",
-      'I have some experience',
-      "I'm fairly advanced",
-      'Skip — let me describe in my own words',
+      "I'll tell you about my role",
+      'Why this skill matters to me',
+      "What's been holding me back",
+      'Just start coaching me',
     ],
   },
   training: {
@@ -109,6 +121,7 @@ export default function ChatWindow({
   skillName,
   skillIcon,
   phase,
+  initialProfile,
 }: Props) {
   const phaseMeta = PHASE_META[phase]
   const supabase = createClient()
@@ -127,6 +140,11 @@ export default function ChatWindow({
   const [streamTools, setStreamTools] = useState<ToolEvent[]>([])
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
+  // The chat keeps a local mirror of the structured profile only so the
+  // side panel stays in sync — it doesn't drive any deterministic UI here.
+  // Haiku is the source of truth for what to ask next.
+  const [, setProfile] = useState<IntelProfile>(initialProfile ?? {})
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -134,7 +152,6 @@ export default function ChatWindow({
 
   const showGreeting = turns.length === 0
 
-  // Smart scroll: only auto-scroll when user is near bottom
   const scrollToBottom = (smooth = true) =>
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
 
@@ -151,13 +168,41 @@ export default function ChatWindow({
     }
   }, [streaming])
 
-  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [input])
+
+  // Listen for side-panel edits so our local profile mirror stays in sync.
+  useEffect(() => {
+    function onPanelUpdate(e: Event) {
+      const detail = (e as CustomEvent<IntelProfile>).detail
+      if (detail) setProfile(detail)
+    }
+    window.addEventListener('agent-intel:update', onPanelUpdate as EventListener)
+    return () => window.removeEventListener('agent-intel:update', onPanelUpdate as EventListener)
+  }, [])
+
+  /**
+   * Pull the latest profile JSONB from the server. Called once after every
+   * completed assistant turn — picks up whatever Haiku just saved via the
+   * record_intel_slot tool. Cheap GET; no extra LLM call.
+   */
+  async function refreshIntelProfile() {
+    try {
+      const r = await fetch(`/api/intel/profile?userSkillId=${encodeURIComponent(userSkillId)}`)
+      if (!r.ok) return
+      const j = (await r.json()) as { profile?: IntelProfile }
+      if (j?.profile) {
+        setProfile(j.profile)
+        window.dispatchEvent(new CustomEvent('agent-intel:update', { detail: j.profile }))
+      }
+    } catch (err) {
+      console.warn('[intel/profile] refresh failed:', err)
+    }
+  }
 
   async function sendMessage(text?: string) {
     const content = (text ?? input).trim()
@@ -177,212 +222,77 @@ export default function ChatWindow({
 
     abortRef.current = new AbortController()
 
-    // Try the Managed Agents endpoint first; fall back to legacy /api/chat
-    // if it isn't configured (503 → switch endpoint).
-    const tryAgentsFirst = await tryAgentsEndpoint({
-      signal: abortRef.current.signal,
-      userSkillId,
-      conversationId,
-      phase,
-      skillName,
-      content,
-      history: turns,
-    })
-
-    if (tryAgentsFirst.kind === 'unavailable') {
-      await streamLegacy()
-    } else if (tryAgentsFirst.kind === 'streamed') {
-      const { fullText, tools } = tryAgentsFirst
-      const assistantTurn: ChatTurn = {
-        id: `tmp-bot-${Date.now()}`,
-        role: 'assistant',
-        content: fullText,
-        tools: tools.length ? tools : undefined,
-        created_at: new Date().toISOString(),
-      }
-      setTurns((prev) => [...prev, assistantTurn])
-      setStreaming('')
-      setStreamTools([])
-      triggerIntelExtraction()
-    } else {
-      // error
-      setLoading(false)
-      setStreaming('')
-    }
-
-    async function streamLegacy() {
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: abortRef.current!.signal,
-          body: JSON.stringify({
-            userSkillId,
-            conversationId,
-            phase,
-            skillName,
-            message: content,
-            history: turns.map((m) => ({ role: m.role, content: m.content })),
-          }),
-        })
-
-        // Backend signals a soft error (auth, missing key, model not found) as JSON
-        if (!res.ok) {
-          let msg = `Coach unavailable (HTTP ${res.status})`
-          try {
-            const j = await res.json()
-            if (j?.error) msg = j.error
-          } catch {
-            try {
-              const t = await res.text()
-              if (t) msg = t
-            } catch {}
-          }
-          setErrorBanner(msg)
-          setLoading(false)
-          return
-        }
-        if (!res.body) throw new Error('No response body')
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let fullText = ''
-
-        setLoading(false)
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          fullText += decoder.decode(value, { stream: true })
-          setStreaming(fullText)
-        }
-
-        const assistantTurn: ChatTurn = {
-          id: `tmp-bot-${Date.now()}`,
-          role: 'assistant',
-          content: fullText,
-          created_at: new Date().toISOString(),
-        }
-        setTurns((prev) => [...prev, assistantTurn])
-        setStreaming('')
-        setStreamTools([])
-
-        await supabase.from('messages').insert([
-          { conversation_id: conversationId, role: 'user', content },
-          { conversation_id: conversationId, role: 'assistant', content: fullText },
-        ])
-
-        triggerIntelExtraction()
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
-          // user-cancelled; no banner
-        } else {
-          console.error(err)
-          setErrorBanner(err?.message ?? 'Failed to reach the coach.')
-        }
-        setLoading(false)
-        setStreaming('')
-      }
-    }
-  }
-
-  /** Stream from /api/agents/chat (NDJSON). Returns the assembled text+tools. */
-  async function tryAgentsEndpoint(args: {
-    signal: AbortSignal
-    userSkillId: string
-    conversationId: string
-    phase: 'pre' | 'training' | 'post'
-    skillName: string
-    content: string
-    history: ChatTurn[]
-  }): Promise<
-    | { kind: 'unavailable' }
-    | { kind: 'streamed'; fullText: string; tools: ToolEvent[] }
-    | { kind: 'error' }
-  > {
     try {
-      const res = await fetch('/api/agents/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: args.signal,
+        signal: abortRef.current.signal,
         body: JSON.stringify({
-          userSkillId: args.userSkillId,
-          conversationId: args.conversationId,
-          phase: args.phase,
-          skillName: args.skillName,
-          message: args.content,
+          userSkillId,
+          conversationId,
+          phase,
+          skillName,
+          message: content,
+          history: turns.map((m) => ({ role: m.role, content: m.content })),
         }),
       })
 
-      // 503 = "Managed Agents not configured" — silently fall back
-      if (res.status === 503) return { kind: 'unavailable' }
-      // Any other non-OK = surface as a banner (don't fall through and re-fail)
       if (!res.ok) {
         let msg = `Coach unavailable (HTTP ${res.status})`
         try {
-          const j = await res.clone().json()
+          const j = await res.json()
           if (j?.error) msg = j.error
-        } catch {}
+        } catch {
+          try {
+            const t = await res.text()
+            if (t) msg = t
+          } catch {}
+        }
         setErrorBanner(msg)
-        return { kind: 'error' }
+        setLoading(false)
+        return
       }
-      if (!res.body) return { kind: 'unavailable' }
+      if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let fullText = ''
-      const tools: ToolEvent[] = []
-      const toolMap: Record<string, ToolEvent> = {}
-      let buffer = ''
 
       setLoading(false)
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) {
-          if (!line.trim()) continue
-          let ev: any
-          try {
-            ev = JSON.parse(line)
-          } catch {
-            continue
-          }
-          if (ev.kind === 'text') {
-            fullText += ev.text
-            setStreaming(fullText)
-          } else if (ev.kind === 'tool_use') {
-            const t: ToolEvent = {
-              id: ev.id,
-              name: ev.name,
-              input: ev.input,
-              status: 'running',
-            }
-            toolMap[ev.id] = t
-            tools.push(t)
-            setStreamTools([...tools])
-          } else if (ev.kind === 'tool_result') {
-            const t = toolMap[ev.id]
-            if (t) {
-              t.output = ev.output
-              t.status = 'done'
-              setStreamTools([...tools])
-            }
-          } else if (ev.kind === 'error') {
-            console.error('Agent error:', ev.message)
-          }
-        }
+        fullText += decoder.decode(value, { stream: true })
+        setStreaming(fullText)
       }
 
-      return { kind: 'streamed', fullText, tools }
+      const assistantTurn: ChatTurn = {
+        id: `tmp-bot-${Date.now()}`,
+        role: 'assistant',
+        content: fullText,
+        created_at: new Date().toISOString(),
+      }
+      setTurns((prev) => [...prev, assistantTurn])
+      setStreaming('')
+      setStreamTools([])
+
+      await supabase.from('messages').insert([
+        { conversation_id: conversationId, role: 'user', content },
+        { conversation_id: conversationId, role: 'assistant', content: fullText },
+      ])
+
+      // Pick up any slot writes the model made via the tool side-channel.
+      refreshIntelProfile()
     } catch (err: any) {
-      if (err?.name === 'AbortError') return { kind: 'error' }
-      console.warn('Agents endpoint failed, falling back:', err?.message)
-      return { kind: 'unavailable' }
+      if (err?.name === 'AbortError') {
+        // user-cancelled
+      } else {
+        console.error(err)
+        setErrorBanner(err?.message ?? 'Failed to reach the coach.')
+      }
+      setLoading(false)
+      setStreaming('')
     }
   }
 
@@ -390,34 +300,6 @@ export default function ChatWindow({
     abortRef.current?.abort()
     setLoading(false)
     setStreaming('')
-  }
-
-  /**
-   * Fire-and-forget call after each completed assistant turn. Re-runs the
-   * intel extractor server-side and broadcasts the merged result so the
-   * Coach Memory panel can update live without a page refresh.
-   */
-  function triggerIntelExtraction() {
-    if (typeof window === 'undefined') return
-    window.dispatchEvent(new CustomEvent('agent-intel:capturing'))
-    fetch('/api/intel/extract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userSkillId, conversationId }),
-    })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`intel extract HTTP ${r.status}`)
-        const j = await r.json()
-        if (j?.intel) {
-          window.dispatchEvent(
-            new CustomEvent('agent-intel:update', { detail: j.intel }),
-          )
-        }
-      })
-      .catch((err) => {
-        console.warn('[intel] extraction failed:', err?.message ?? err)
-        window.dispatchEvent(new CustomEvent('agent-intel:capture-failed'))
-      })
   }
 
   return (
@@ -468,10 +350,7 @@ export default function ChatWindow({
       )}
 
       {/* Messages area */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto chat-scroll relative"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto chat-scroll relative">
         <div className="px-4 lg:px-8 py-6 space-y-5">
           {showGreeting && (
             <div className="flex items-end gap-3 animate-fade-up">
@@ -486,7 +365,6 @@ export default function ChatWindow({
             <ChatTurnView key={turn.id} turn={turn} />
           ))}
 
-          {/* Streaming response */}
           {(streaming || streamTools.length > 0) && (
             <div className="flex items-end gap-3 animate-fade-up">
               <CoachAvatar />
@@ -517,7 +395,7 @@ export default function ChatWindow({
         </div>
       </div>
 
-      {/* Suggestions for greeting */}
+      {/* Quick-reply chips on the very first turn */}
       {showGreeting && (
         <div className="w-full px-4 lg:px-8 pb-3">
           <div className="flex items-center gap-2 mb-2 text-[10px] font-black text-muted-foreground uppercase tracking-[2px]">

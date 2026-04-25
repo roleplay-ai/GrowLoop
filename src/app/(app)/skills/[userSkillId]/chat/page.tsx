@@ -85,18 +85,22 @@ export default async function ChatPage({ params, searchParams }: Props) {
     }),
   )
 
-  // Agent intel
+  // Agent intel — pull the structured `profile` JSONB. Old free-text columns
+  // are kept on the row but no longer drive the side panel.
   const { data: intel } = await supabase
     .from('agent_intel')
-    .select('current_level, context, motivations, blockers, raw_summary, updated_at')
+    .select('profile, updated_at')
     .eq('user_id', user!.id)
     .eq('skill_id', skill?.id)
     .maybeSingle()
 
+  const initialProfile = (intel?.profile ?? {}) as Record<string, string>
+
   return (
     <div className="flex h-full overflow-hidden bg-brand-cream/30">
       <AgentIntelPanelWrapper
-        intel={intel ?? null}
+        userSkillId={userSkillId}
+        initialProfile={initialProfile}
         skillName={skill?.name ?? 'this skill'}
         conversations={conversationPreviews}
         activeConversationId={activeId}
@@ -108,6 +112,7 @@ export default async function ChatPage({ params, searchParams }: Props) {
         skillName={skill?.name ?? 'Skill'}
         skillIcon={skill?.icon}
         phase={userSkill.phase}
+        initialProfile={initialProfile}
       />
     </div>
   )

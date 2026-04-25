@@ -492,6 +492,7 @@ export type Database = {
           motivations: string[] | null
           blockers: string[] | null
           raw_summary: string | null
+          profile: Json
           updated_at: string
         }
         Insert: {
@@ -504,6 +505,7 @@ export type Database = {
           motivations?: string[] | null
           blockers?: string[] | null
           raw_summary?: string | null
+          profile?: Json
           updated_at?: string
         }
         Update: {
@@ -516,6 +518,7 @@ export type Database = {
           motivations?: string[] | null
           blockers?: string[] | null
           raw_summary?: string | null
+          profile?: Json
           updated_at?: string
         }
       }

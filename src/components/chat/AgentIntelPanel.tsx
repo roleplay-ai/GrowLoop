@@ -1,28 +1,39 @@
 'use client'
-import { RefreshCw, Lock, Sparkles } from 'lucide-react'
+// src/components/chat/AgentIntelPanel.tsx
+//
+// Side panel that mirrors the L&D HTML reference. Renders the structured
+// slots from agent_intel.profile (jsonb) as captured / pending cards, with
+// inline edit-on-click via chips + textarea.
+//
+// Each card is self-contained: clicking the pencil icon swaps the card into
+// edit mode. Saving POSTs to /api/intel/answer and broadcasts an
+// `agent-intel:update` event so the chat (and any other listeners) can stay
+// in sync.
 
-interface AgentIntel {
-  current_level?: string | null
-  context?: string | null
-  motivations?: string[] | null
-  blockers?: string[] | null
-  raw_summary?: string | null
-  updated_at?: string
-}
-
-type IntelKey = 'current_level' | 'context' | 'motivations' | 'blockers' | 'raw_summary'
+import { useEffect, useRef, useState } from 'react'
+import { Lock, Sparkles, Pencil, Check, X, RefreshCw } from 'lucide-react'
+import {
+  SLOTS,
+  SECTIONS,
+  countCaptured,
+  journeyProgress,
+  type IntelProfile,
+  type SlotDef,
+  type SlotKey,
+} from '@/lib/agent/slots'
 
 interface Props {
-  intel: AgentIntel | null
+  userSkillId: string
+  profile: IntelProfile | null
   skillName: string
   conversations: Array<{ id: string; created_at: string; phase: string; preview?: string }>
   activeConversationId?: string
   onPickConversation?: (id: string) => void
   onNewConversation?: () => void
-  /** True while a background extraction call is in flight. */
-  capturing?: boolean
-  /** Keys whose value changed in the latest extraction; used for a brief flash. */
-  recentlyCaptured?: IntelKey[]
+  /** Slot keys whose value changed in the most recent save (for animation). */
+  recentlyCaptured?: SlotKey[]
+  /** Called after a slot is saved so the wrapper can update state + emit events. */
+  onSlotSaved?: (profile: IntelProfile) => void
 }
 
 const PHASE_DOT: Record<string, string> = {
@@ -32,28 +43,18 @@ const PHASE_DOT: Record<string, string> = {
 }
 
 export default function AgentIntelPanel({
-  intel,
+  userSkillId,
+  profile,
   skillName,
   conversations,
   activeConversationId,
   onPickConversation,
   onNewConversation,
-  capturing = false,
   recentlyCaptured = [],
+  onSlotSaved,
 }: Props) {
-  const hasPersonal = !!(intel?.raw_summary && intel.raw_summary.trim())
-  const hasLevel = !!(intel?.current_level && intel.current_level.trim())
-  const hasContext = !!(intel?.context && intel.context.trim())
-  const motivations = intel?.motivations ?? []
-  const blockers = intel?.blockers ?? []
-
-  // Captured count + completion (mirror HTML: personal + 4 slots = 5 total)
-  const slots = [hasPersonal, hasLevel, hasContext, motivations.length > 0, blockers.length > 0]
-  const captured = slots.filter(Boolean).length
-  const total = slots.length
-  const pct = Math.round((captured / total) * 100)
-
-  const isFresh = (k: IntelKey) => recentlyCaptured.includes(k)
+  const { captured, total, pct } = countCaptured(profile)
+  const journey = journeyProgress(profile)
 
   return (
     <>
@@ -62,18 +63,10 @@ export default function AgentIntelPanel({
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-base leading-none">🧠</span>
           <h3 className="text-xs font-extrabold tracking-[0.3px] text-brand-dark">Agent Intel</h3>
-          {capturing ? (
-            <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider text-white bg-brand-purple rounded-full px-2 py-0.5">
-              <Sparkles className="w-2.5 h-2.5 animate-pulse" />
-              Capturing
-            </span>
-          ) : (
-            <span className="ml-auto text-[9px] font-extrabold text-white bg-brand-purple rounded-full px-2 py-0.5">
-              {captured} captured
-            </span>
-          )}
+          <span className="ml-auto text-[9px] font-extrabold text-white bg-brand-purple rounded-full px-2 py-0.5">
+            {captured}/{total} captured
+          </span>
         </div>
-        {/* Yellow gradient context pill — copy from HTML */}
         <div
           className="rounded-lg px-3 py-2 text-[11px] leading-relaxed font-medium text-brand-dark border"
           style={{
@@ -85,7 +78,7 @@ export default function AgentIntelPanel({
           <strong className="text-brand-orange font-extrabold">
             adapts every nudge, plan & message
           </strong>{' '}
-          to you.
+          to you. Click any card to edit.
         </div>
       </div>
 
@@ -102,68 +95,44 @@ export default function AgentIntelPanel({
 
       {/* ── Body ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto chat-scroll px-3 pt-2 pb-4">
-        {/* Personal Context — gold card, always first */}
-        <IntelItem
-          captured={hasPersonal}
-          fresh={isFresh('raw_summary')}
-          icon="✍️"
-          label="Personal Context"
-          gold
-          value={intel?.raw_summary}
-          hint={`Add context about ${skillName} — your role, goals, challenges. The agent uses this in every conversation.`}
-        />
+        {SECTIONS.map((section) => {
+          const slots = SLOTS.filter((s) => s.section === section.key)
+          return (
+            <div key={section.key}>
+              <PhaseHeader color={section.color} icon={section.icon} label={section.label} />
 
-        {/* Phase: What Coach Knows */}
-        <PhaseHeader color="#3696FC" icon="👤" label="Your Profile" />
-        <IntelItem
-          captured={hasLevel}
-          fresh={isFresh('current_level')}
-          icon="📍"
-          label="Current Level"
-          value={intel?.current_level}
-          hint="Your familiarity with this skill"
-        />
-        <IntelItem
-          captured={hasContext}
-          fresh={isFresh('context')}
-          icon="🏢"
-          label="Your Context"
-          value={intel?.context}
-          hint="Role, team, situation"
-        />
+              {/* The active skill is always known — render it as a static
+                  captured card at the top of the goal section. */}
+              {section.key === 'goal' && (
+                <IntelSlotCard
+                  staticValue={skillName}
+                  staticIcon="🎯"
+                  staticLabel="Active Skill"
+                  staticHint="The skill you're growing in this loop"
+                />
+              )}
 
-        {/* Phase: Goals & Challenges */}
-        <PhaseHeader color="#F68A29" icon="🎯" label="Goals & Challenges" />
-        <IntelItem
-          captured={motivations.length > 0}
-          fresh={isFresh('motivations')}
-          icon="🌟"
-          label="Why This Skill Matters"
-          listValue={motivations}
-          hint="What mastering this unlocks for you"
-        />
-        <IntelItem
-          captured={blockers.length > 0}
-          fresh={isFresh('blockers')}
-          icon="🚧"
-          label="What's Holding You Back"
-          listValue={blockers}
-          hint='e.g. "No time", "Feels awkward", "No feedback"'
-        />
+              {slots.map((slot) => (
+                <IntelSlotCard
+                  key={slot.key}
+                  userSkillId={userSkillId}
+                  slot={slot}
+                  value={profile?.[slot.key]}
+                  fresh={recentlyCaptured.includes(slot.key)}
+                  skillName={skillName}
+                  onSaved={(p) => onSlotSaved?.(p)}
+                />
+              ))}
 
-        {intel?.updated_at && (
-          <p className="text-[10px] text-muted-foreground/60 font-mono pt-3 px-1">
-            Updated{' '}
-            {new Date(intel.updated_at).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            })}
-          </p>
-        )}
+              {/* Journey progress — read-only, computed */}
+              {section.key === 'goal' && (
+                <JourneyProgressCard percent={journey} />
+              )}
+            </div>
+          )
+        })}
 
-        {/* Sessions list (Growloop-specific, kept) */}
+        {/* Sessions list */}
         <div className="mt-5 pt-4 border-t border-card-border">
           <div className="flex items-center justify-between mb-2.5 px-1">
             <h4 className="text-[10px] font-extrabold uppercase tracking-[1.2px] text-muted-foreground">
@@ -244,7 +213,6 @@ export default function AgentIntelPanel({
   )
 }
 
-/* ─── Phase header (HTML's `.intel-phase-header`) ──────────────── */
 function PhaseHeader({ color, icon, label }: { color: string; icon: string; label: string }) {
   return (
     <div className="flex items-center gap-1.5 pt-2.5 pb-1.5 px-1 sticky top-0 bg-white z-10">
@@ -257,61 +225,258 @@ function PhaseHeader({ color, icon, label }: { color: string; icon: string; labe
   )
 }
 
-/* ─── Intel card (HTML's `.intel-item`) ────────────────────────── */
-function IntelItem(props: {
-  captured: boolean
-  fresh?: boolean
-  icon: string
-  label: string
-  value?: string | null
-  listValue?: string[]
-  hint: string
-  gold?: boolean
-}) {
-  const { captured, fresh, icon, label, value, listValue, hint, gold } = props
+/* ─── Slot card with inline edit-on-click ──────────────────────── */
+function IntelSlotCard(
+  props:
+    | {
+        // Editable, profile-backed slot card
+        userSkillId: string
+        slot: SlotDef
+        value?: string
+        fresh?: boolean
+        skillName: string
+        onSaved?: (profile: IntelProfile) => void
+        staticValue?: never
+        staticIcon?: never
+        staticLabel?: never
+        staticHint?: never
+      }
+    | {
+        // Read-only static card (e.g. Active Skill)
+        staticValue: string
+        staticIcon: string
+        staticLabel: string
+        staticHint: string
+        userSkillId?: never
+        slot?: never
+        value?: never
+        fresh?: never
+        skillName?: never
+        onSaved?: never
+      },
+) {
+  // Static card — render and bail.
+  if ('staticValue' in props && props.staticValue !== undefined) {
+    return (
+      <div className="rounded-xl px-2.5 py-2.5 mb-1.5 border bg-white border-brand-dark/10 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+        <div className="text-[9px] font-extrabold uppercase tracking-[0.8px] text-brand-orange mb-1 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0" />
+          <span>
+            {props.staticIcon} {props.staticLabel}
+          </span>
+        </div>
+        <p className="text-xs text-brand-dark leading-snug">{props.staticValue}</p>
+      </div>
+    )
+  }
+
+  const { userSkillId, slot, value, fresh, onSaved } = props as {
+    userSkillId: string
+    slot: SlotDef
+    value?: string
+    fresh?: boolean
+    skillName: string
+    onSaved?: (profile: IntelProfile) => void
+  }
+
+  const captured = !!(value && value.trim())
+  const [editing, setEditing] = useState(false)
+  const [pendingFreeText, setPendingFreeText] = useState(false)
+  const [draft, setDraft] = useState(value ?? '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    setDraft(value ?? '')
+  }, [value])
+
+  function startEdit() {
+    setDraft(value ?? '')
+    setPendingFreeText(captured ? true : false)
+    setEditing(true)
+    setErr(null)
+    setTimeout(() => taRef.current?.focus(), 0)
+  }
+  function cancelEdit() {
+    setEditing(false)
+    setPendingFreeText(false)
+    setErr(null)
+  }
+
+  async function commit(nextValue: string) {
+    if (busy) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/intel/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userSkillId, slot: slot.key, value: nextValue }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        throw new Error(j?.error || `HTTP ${res.status}`)
+      }
+      const j = (await res.json()) as { profile: IntelProfile }
+      onSaved?.(j.profile)
+      window.dispatchEvent(new CustomEvent('agent-intel:update', { detail: j.profile }))
+      setEditing(false)
+      setPendingFreeText(false)
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const baseCard =
-    'rounded-xl px-2.5 py-2.5 mb-1.5 border transition-all duration-150 animate-fade-up'
-  const stateCard = gold
-    ? 'bg-gradient-to-br from-[#FFFBEE] to-[#FFF6CF] border-[rgba(255,206,0,0.4)]'
-    : captured
-      ? 'bg-white border-brand-dark/10 shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:border-brand-yellow/60 hover:shadow-[0_2px_10px_rgba(255,206,0,0.12)]'
-      : 'bg-[#FAFAF7] border-brand-dark/[0.07] opacity-60'
+    'group relative rounded-xl px-2.5 py-2.5 mb-1.5 border transition-all duration-150 animate-fade-up'
+  const stateCard = captured
+    ? 'bg-white border-brand-dark/10 shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:border-brand-yellow/60 hover:shadow-[0_2px_10px_rgba(255,206,0,0.12)]'
+    : 'bg-[#FAFAF7] border-brand-dark/[0.07] opacity-70 hover:opacity-100 hover:bg-white'
   const freshCard = fresh ? 'ring-2 ring-brand-yellow/70 shadow-glow-yellow animate-pop-in' : ''
 
-  const labelColor = gold ? 'text-brand-orange' : 'text-brand-orange'
-
   return (
-    <div className={`${baseCard} ${stateCard} ${freshCard}`}>
-      <div className={`text-[9px] font-extrabold uppercase tracking-[0.8px] ${labelColor} mb-1 flex items-center gap-1.5`}>
-        {captured && (
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0" />
-        )}
+    <div
+      className={`${baseCard} ${stateCard} ${freshCard} ${editing ? 'border-brand-purple/50 bg-white' : ''}`}
+    >
+      <div className="text-[9px] font-extrabold uppercase tracking-[0.8px] text-brand-orange mb-1 flex items-center gap-1.5">
+        {captured && <span className="w-1.5 h-1.5 rounded-full bg-brand-green flex-shrink-0" />}
         <span>
-          {icon} {label}
+          {slot.icon} {slot.label}
         </span>
         {fresh && (
           <span className="ml-auto text-[8px] font-extrabold uppercase tracking-[1.2px] text-brand-yellow bg-brand-yellow/15 border border-brand-yellow/40 rounded-full px-1.5 py-px">
             Just captured
           </span>
         )}
+        {!fresh && !editing && (
+          <button
+            onClick={startEdit}
+            className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-brand-purple p-0.5"
+            title={captured ? 'Edit' : 'Fill in'}
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        )}
       </div>
-      {captured ? (
-        listValue ? (
-          <ul className="space-y-0.5 pl-0.5">
-            {listValue.map((m, i) => (
-              <li key={i} className="text-xs text-brand-dark leading-relaxed flex gap-1.5">
-                <span className="text-brand-yellow font-bold">·</span>
-                {m}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-brand-dark leading-snug">{value}</p>
-        )
+
+      {editing ? (
+        <div className="mt-1">
+          {slot.chips?.length && !pendingFreeText ? (
+            <>
+              <div className="flex gap-1.5 flex-wrap">
+                {slot.chips.map((chip) => (
+                  <button
+                    key={chip.value}
+                    disabled={busy}
+                    onClick={() => {
+                      if (chip.free) {
+                        setPendingFreeText(true)
+                        setTimeout(() => taRef.current?.focus(), 0)
+                        return
+                      }
+                      commit(chip.value)
+                    }}
+                    className="text-[10px] font-semibold px-2.5 py-1 rounded-full border border-brand-purple/25 text-brand-purple bg-white hover:bg-brand-purple hover:text-white hover:border-brand-purple transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {chip.label ?? chip.value}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={cancelEdit}
+                className="mt-2 text-[10px] font-bold text-muted-foreground hover:text-brand-dark"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <textarea
+                ref={taRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault()
+                    commit(draft)
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    cancelEdit()
+                  }
+                }}
+                rows={2}
+                placeholder={slot.hint}
+                disabled={busy}
+                className="w-full resize-none px-2 py-1.5 rounded-md border border-brand-purple/30 text-xs text-brand-dark placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple bg-white"
+              />
+              <div className="flex items-center gap-1 mt-1.5">
+                <button
+                  onClick={() => commit(draft)}
+                  disabled={busy || !draft.trim()}
+                  className="text-[10px] font-bold inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-dark text-white hover:bg-brand-dark/90 disabled:opacity-40"
+                >
+                  <Check className="w-3 h-3" /> Save
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  disabled={busy}
+                  className="text-[10px] font-bold inline-flex items-center gap-1 px-2 py-1 rounded-md text-muted-foreground hover:bg-brand-dark/[0.05]"
+                >
+                  <X className="w-3 h-3" /> Cancel
+                </button>
+                {slot.chips?.length && (
+                  <button
+                    onClick={() => setPendingFreeText(false)}
+                    disabled={busy}
+                    className="ml-auto text-[10px] font-bold text-brand-purple hover:underline"
+                  >
+                    ← back to options
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+          {err && <p className="text-[10px] text-brand-red mt-1">{err}</p>}
+        </div>
+      ) : captured ? (
+        <button
+          onClick={startEdit}
+          className="text-left w-full text-xs text-brand-dark leading-snug hover:underline decoration-brand-purple/30 underline-offset-2"
+        >
+          {value}
+        </button>
       ) : (
-        <p className="text-[11px] font-medium italic text-[#B4B2A9] leading-snug">{hint}</p>
+        <button onClick={startEdit} className="text-left w-full">
+          <p className="text-[11px] font-medium italic text-[#B4B2A9] leading-snug">{slot.hint}</p>
+          <p className="text-[10px] font-bold text-brand-purple mt-1 inline-flex items-center gap-1">
+            <Sparkles className="w-2.5 h-2.5" /> Tap to fill
+          </p>
+        </button>
       )}
+    </div>
+  )
+}
+
+function JourneyProgressCard({ percent }: { percent: number }) {
+  return (
+    <div className="rounded-xl px-2.5 py-2.5 mb-1.5 border bg-white border-brand-dark/10 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+      <div className="text-[9px] font-extrabold uppercase tracking-[0.8px] text-brand-orange mb-1.5 flex items-center gap-1.5">
+        <span>⚡ Journey Progress</span>
+        <span className="ml-auto text-[10px] font-extrabold text-brand-purple">{percent}%</span>
+      </div>
+      <div className="bg-brand-dark/[0.06] rounded-full h-1.5 overflow-hidden">
+        <div
+          className="h-1.5 rounded-full transition-all duration-500 ease-out"
+          style={{
+            width: `${percent}%`,
+            background: 'linear-gradient(90deg,#623CEA,#23CE68)',
+          }}
+        />
+      </div>
     </div>
   )
 }
