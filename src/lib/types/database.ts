@@ -323,6 +323,7 @@ export type Database = {
           id: string
           reality_check_id: string | null
           peer_email: string
+          peer_name: string | null
           peer_relation: string | null
           token: string
           status: 'pending' | 'submitted' | 'expired'
@@ -334,6 +335,7 @@ export type Database = {
           id?: string
           reality_check_id?: string | null
           peer_email: string
+          peer_name?: string | null
           peer_relation?: string | null
           token?: string
           status?: 'pending' | 'submitted' | 'expired'
@@ -345,6 +347,7 @@ export type Database = {
           id?: string
           reality_check_id?: string | null
           peer_email?: string
+          peer_name?: string | null
           peer_relation?: string | null
           token?: string
           status?: 'pending' | 'submitted' | 'expired'

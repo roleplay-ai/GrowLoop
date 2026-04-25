@@ -67,7 +67,7 @@ export async function middleware(request: NextRequest) {
   // Note: (app), (hr), (super-admin) are route groups - parentheses don't appear in URL
   const superAdminRoutes = ['/orgs', '/admin-skills', '/prompts', '/billing', '/flags', '/audit', '/llm']
   const hrRoutes = ['/insights', '/participants', '/groups', '/hr-skills', '/settings']
-  const participantRoutes = ['/skills', '/progress', '/plan', '/community']
+  const participantRoutes = ['/skills', '/reality-check', '/progress', '/plan', '/community']
 
   if (superAdminRoutes.some(r => pathname.startsWith(r)) && role !== 'super_admin') {
     console.log('[Middleware] Not super_admin, redirecting to login')

@@ -25,7 +25,6 @@ export default async function ProgressPage({ params }: Props) {
 
   if (!userSkill) notFound()
 
-  // Only show progress for post phase
   if (userSkill.phase !== 'post') {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -38,7 +37,6 @@ export default async function ProgressPage({ params }: Props) {
     )
   }
 
-  // Fetch reality check rounds
   const { data: rounds } = await supabase
     .from('reality_check_rounds')
     .select('*')
@@ -70,7 +68,7 @@ export default async function ProgressPage({ params }: Props) {
             </div>
             <div className="text-center">
               <div className={`text-3xl font-black ${(userSkill.peer_growth ?? 0) >= 0 ? 'text-brand-green' : 'text-red-500'}`}>
-                {userSkill.peer_growth != null 
+                {userSkill.peer_growth != null
                   ? `${userSkill.peer_growth >= 0 ? '+' : ''}${userSkill.peer_growth.toFixed(1)}`
                   : '—'
                 }
@@ -90,14 +88,14 @@ export default async function ProgressPage({ params }: Props) {
               {rounds.map(round => (
                 <div key={round.id} className="flex items-center justify-between py-2 border-b border-card-border last:border-0">
                   <div>
-                    <span className="font-semibold text-sm text-brand-dark">Round {round.round_number + 1}</span>
+                    <span className="font-semibold text-sm text-brand-dark">Round {round.round_number}</span>
                     <span className="text-xs text-muted-foreground ml-2">
                       {new Date(round.started_at).toLocaleDateString()}
                     </span>
                   </div>
                   <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                    round.closed_at 
-                      ? 'bg-brand-green/10 text-brand-green' 
+                    round.closed_at
+                      ? 'bg-brand-green/10 text-brand-green'
                       : 'bg-brand-orange/10 text-brand-orange'
                   }`}>
                     {round.closed_at ? 'Completed' : 'In Progress'}
@@ -110,9 +108,8 @@ export default async function ProgressPage({ params }: Props) {
           )}
         </div>
 
-        {/* Coming soon note */}
         <p className="text-center text-xs text-muted-foreground">
-          Detailed charts and growth comparison coming in Phase 10
+          Detailed growth charts and Day 30/90 comparison coming in Phase 10
         </p>
       </div>
     </div>

@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/types'
-import { Send, Sparkles, Square, AlertTriangle, X, LogOut } from 'lucide-react'
+import Link from 'next/link'
+import { Send, Sparkles, Square, AlertTriangle, X, LogOut, ArrowRight } from 'lucide-react'
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
 import ConversationSummaryModal from './ConversationSummaryModal'
@@ -371,6 +372,43 @@ export default function ChatWindow({
           )}
         </div>
       </div>
+
+      {/* Reality Check / Results contextual banner */}
+      {phase === 'training' && (
+        <Link
+          href={`/skills/${userSkillId}/reality-check`}
+          className="block px-4 lg:px-8 pt-3"
+        >
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-brand-purple/25 bg-gradient-to-r from-brand-purple/10 via-brand-purple/5 to-transparent hover:bg-brand-purple/15 transition-colors">
+            <div className="text-2xl">📈</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-extrabold text-brand-purple uppercase tracking-wide">
+                Reality Check ready
+              </div>
+              <div className="text-[13px] text-brand-dark font-semibold truncate">
+                Rate yourself + send anonymous links to 3-8 peers — see how your team experiences this skill.
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-brand-purple flex-shrink-0" />
+          </div>
+        </Link>
+      )}
+      {phase === 'post' && (
+        <Link href={`/skills/${userSkillId}/results`} className="block px-4 lg:px-8 pt-3">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-brand-green/25 bg-gradient-to-r from-brand-green/10 via-brand-green/5 to-transparent hover:bg-brand-green/15 transition-colors">
+            <div className="text-2xl">🎯</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-extrabold text-brand-green uppercase tracking-wide">
+                Your results are in
+              </div>
+              <div className="text-[13px] text-brand-dark font-semibold truncate">
+                See your self-vs-peer breakdown, biggest blind spot, and theme summary.
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-brand-green flex-shrink-0" />
+          </div>
+        </Link>
+      )}
 
       {/* Error banner */}
       {errorBanner && (

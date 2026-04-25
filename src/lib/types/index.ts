@@ -108,11 +108,14 @@ export interface RealityCheckRound {
   closed_at?:      string
 }
 
+export type PeerRelation = 'manager' | 'peer' | 'report' | 'cross_fn'
+
 export interface PeerInvite {
   id:               string
   reality_check_id: string
   peer_email:       string
-  peer_relation?:   'manager' | 'peer' | 'report' | 'cross_fn'
+  peer_name?:       string
+  peer_relation?:   PeerRelation
   token:            string
   status:           InviteStatus
   sent_at:          string
