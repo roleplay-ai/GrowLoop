@@ -23,6 +23,14 @@ Co-create a realistic action plan (3-7 actions) based on the gap between self an
 Be encouraging and specific.`,
 }
 
+const RESPONSE_LENGTH_RULE = `
+HARD RESPONSE-LENGTH RULE (must follow):
+- Reply in **2 to 3 sentences total**. Never more.
+- No bullet lists, no numbered lists, no headings, no markdown structure.
+- One short, focused next step or one short question per reply.
+- If you would normally write a list (action plan, peer list, etc.), instead pick the single most important item and ask if they want more.
+`
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -55,7 +63,7 @@ export async function POST(req: NextRequest) {
       intel?.current_level ? `\nParticipant's known level: ${intel.current_level}` : '',
       intel?.motivations?.length ? `\nMotivations: ${intel.motivations.join(', ')}` : '',
       intel?.blockers?.length ? `\nKnown blockers: ${intel.blockers.join(', ')}` : '',
-      '\nKeep responses concise (2-4 paragraphs max). Use a conversational tone. No bullet lists unless listing action steps.',
+      RESPONSE_LENGTH_RULE,
     ].join('')
 
     // Build message history (last 10 turns)
@@ -69,7 +77,7 @@ export async function POST(req: NextRequest) {
     try {
       stream = await anthropic.messages.stream({
         model: COACH_MODEL,
-        max_tokens: 800,
+        max_tokens: 180,
         system: systemPrompt,
         messages,
       })
