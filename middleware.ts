@@ -47,27 +47,20 @@ export async function middleware(request: NextRequest) {
   // ── Fetch role from custom users table ─────────────────────────────────
   const { data: profile, error: profileError } = await supabase
     .from('users')
-    .select('role, must_change_pw')
+    .select('role')
     .eq('id', user.id)
     .single()
 
   console.log('[Middleware] Profile:', profile, '| Error:', profileError)
 
   const role = profile?.role
-  const mustChange = profile?.must_change_pw
 
-  console.log('[Middleware] Role:', role, '| Must change pw:', mustChange)
+  console.log('[Middleware] Role:', role)
 
   // If no profile found, redirect to login
   if (!profile || !role) {
     console.log('[Middleware] No profile/role found, redirecting to login')
     return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // Force password change
-  if (mustChange && pathname !== '/change-password') {
-    console.log('[Middleware] Must change password, redirecting')
-    return NextResponse.redirect(new URL('/change-password', request.url))
   }
 
   // ── Role guards ─────────────────────────────────────────────────────────
