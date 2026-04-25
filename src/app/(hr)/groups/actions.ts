@@ -188,6 +188,101 @@ export async function addParticipantToGroup(groupId: string, userId: string) {
   return { success: true }
 }
 
+export async function addParticipantsToGroup(groupId: string, userIds: string[]) {
+  const supabase = await createClient()
+  const serviceClient = await createServiceClient()
+
+  const { error: authError, user: actor, orgId } = await verifyHR(supabase)
+  if (authError) return { success: false, error: authError }
+  if (!userIds?.length) return { success: false, error: 'No participants selected' }
+
+  // Verify group belongs to HR org
+  const { data: group } = await serviceClient
+    .from('groups')
+    .select('org_id')
+    .eq('id', groupId)
+    .single()
+
+  if (!group || group.org_id !== orgId) {
+    return { success: false, error: 'Group not found' }
+  }
+
+  // Verify targets are participants in HR org (defense-in-depth)
+  const { data: targets } = await serviceClient
+    .from('users')
+    .select('id, org_id, role')
+    .in('id', userIds)
+
+  const validIds = (targets ?? [])
+    .filter((u: any) => u.org_id === orgId && u.role === 'participant')
+    .map((u: any) => u.id)
+
+  if (validIds.length === 0) {
+    return { success: false, error: 'No valid participants found' }
+  }
+
+  const { error } = await serviceClient
+    .from('group_members')
+    .upsert(validIds.map((id: string) => ({ group_id: groupId, user_id: id })), {
+      onConflict: 'group_id,user_id',
+      ignoreDuplicates: true,
+    })
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await insertAuditLog(serviceClient, 'add_to_group_bulk', 'group', groupId, actor!.id, {
+    user_ids: validIds,
+    requested: userIds,
+  })
+
+  revalidatePath('/groups')
+  return { success: true, added: validIds.length }
+}
+
+export async function setGroupVisibleSkills(groupId: string, skillIds: string[]) {
+  const supabase = await createClient()
+  const serviceClient = await createServiceClient()
+
+  const { error: authError, user: actor, orgId } = await verifyHR(supabase)
+  if (authError) return { success: false, error: authError }
+
+  const { data: group } = await serviceClient
+    .from('groups')
+    .select('org_id')
+    .eq('id', groupId)
+    .single()
+
+  if (!group || group.org_id !== orgId) {
+    return { success: false, error: 'Group not found' }
+  }
+
+  // Defense-in-depth: only allow skills enabled for this org (or platform skills that are enabled via org_skills)
+  const { data: allowed } = await serviceClient
+    .from('org_skills')
+    .select('skill_id')
+    .eq('org_id', orgId)
+    .eq('enabled', true)
+
+  const allowedSet = new Set((allowed ?? []).map((r: any) => r.skill_id))
+  const sanitized = (skillIds ?? []).filter((id) => allowedSet.has(id))
+
+  const { error } = await serviceClient
+    .from('groups')
+    .update({ default_skills: sanitized })
+    .eq('id', groupId)
+
+  if (error) return { success: false, error: error.message }
+
+  await insertAuditLog(serviceClient, 'set_group_visible_skills', 'group', groupId, actor!.id, {
+    skill_ids: sanitized,
+  })
+
+  revalidatePath('/groups')
+  return { success: true, skillIds: sanitized }
+}
+
 export async function removeParticipantFromGroup(groupId: string, userId: string) {
   const supabase = await createClient()
   const serviceClient = await createServiceClient()

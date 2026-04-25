@@ -3,12 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import SkillsGrid from '@/components/skills/SkillsGrid'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = { title: 'My Skills' }
 
 export default async function SkillsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   // Fetch user's enrolled skills with skill details
   const { data: userSkills } = await supabase
@@ -17,7 +19,7 @@ export default async function SkillsPage() {
       *,
       skill:skills(id, name, icon, description, dimensions)
     `)
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .eq('is_active', true)
     .order('assigned_at', { ascending: false })
 
@@ -27,15 +29,31 @@ export default async function SkillsPage() {
   const { data: profile } = await supabase
     .from('users')
     .select('org_id')
-    .eq('id', user!.id)
+    .eq('id', user.id)
     .single()
 
-  const { data: availableSkills } = await supabase
+  // Group-based visibility: if a group has default_skills set, only show those.
+  const { data: groupRow } = await supabase
+    .from('group_members')
+    .select('group:groups(default_skills)')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle()
+
+  const allowedSkillIds = ((groupRow as any)?.group?.default_skills ?? []) as string[]
+
+  let availableQuery = supabase
     .from('org_skills')
     .select('skill:skills(id, name, icon, description)')
     .eq('org_id', profile?.org_id)
     .eq('enabled', true)
     .not('skill_id', 'in', `(${enrolledIds.length ? enrolledIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
+
+  if (allowedSkillIds.length > 0) {
+    availableQuery = availableQuery.in('skill_id', allowedSkillIds)
+  }
+
+  const { data: availableSkills } = await availableQuery
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

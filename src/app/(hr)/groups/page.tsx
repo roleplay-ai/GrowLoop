@@ -13,7 +13,7 @@ export default async function GroupsPage() {
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
 
-  const [{ data: groups }, { data: participants }] = await Promise.all([
+  const [{ data: groups }, { data: participants }, { data: enabledSkills }] = await Promise.all([
     supabase
       .from('groups')
       .select('*, group_members(user_id)')
@@ -26,13 +26,23 @@ export default async function GroupsPage() {
       .eq('role', 'participant')
       .eq('status', 'active')
       .order('name'),
+    supabase
+      .from('org_skills')
+      .select('skill:skills(id, name, icon, description)')
+      .eq('org_id', profile?.org_id)
+      .eq('enabled', true)
+      .order('added_at', { ascending: false }),
   ])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Topbar title="Groups" />
       <main className="flex-1 overflow-y-auto p-6">
-        <GroupsManager groups={groups ?? []} participants={participants ?? []} />
+        <GroupsManager
+          groups={groups ?? []}
+          participants={participants ?? []}
+          enabledSkills={(enabledSkills ?? []).map((r: any) => r.skill).filter(Boolean)}
+        />
       </main>
     </div>
   )

@@ -30,6 +30,20 @@ export async function enrollInSkill(skillId: string): Promise<EnrollResult> {
     return { success: false, error: 'User has no organization' }
   }
 
+  // Group-based visibility check: if the user's group has default_skills set,
+  // only allow enrollment in those skills.
+  const { data: groupRow } = await supabase
+    .from('group_members')
+    .select('group:groups(default_skills)')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle()
+
+  const allowedSkillIds = ((groupRow as any)?.group?.default_skills ?? []) as string[]
+  if (allowedSkillIds.length > 0 && !allowedSkillIds.includes(skillId)) {
+    return { success: false, error: 'This skill is not available for your group' }
+  }
+
   // Check if skill is enabled for user's org
   const { data: orgSkill } = await supabase
     .from('org_skills')
