@@ -3,17 +3,19 @@ import { createClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import HRInsightsDashboard from '@/components/hr/HRInsightsDashboard'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = { title: 'Insights' }
 
 export default async function HRInsightsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: profile } = await supabase
     .from('users')
     .select('org_id')
-    .eq('id', user!.id)
+    .eq('id', user.id)
     .single()
 
   const orgId = profile?.org_id

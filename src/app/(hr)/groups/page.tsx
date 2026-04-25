@@ -3,13 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import GroupsManager from '@/components/hr/GroupsManager'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = { title: 'Groups' }
 
 export default async function GroupsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: profile } = await supabase.from('users').select('org_id').eq('id', user!.id).single()
+  if (!user) redirect('/login')
+  const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
 
   const [{ data: groups }, { data: participants }] = await Promise.all([
     supabase
