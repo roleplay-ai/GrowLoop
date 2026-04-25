@@ -95,6 +95,12 @@ export default async function ChatPage({ params, searchParams }: Props) {
 
   return (
     <div className="flex h-full overflow-hidden bg-brand-cream/30">
+      <AgentIntelPanelWrapper
+        intel={intel ?? null}
+        skillName={skill?.name ?? 'this skill'}
+        conversations={conversationPreviews}
+        activeConversationId={activeId}
+      />
       <ChatWindow
         userSkillId={userSkillId}
         conversationId={activeId ?? ''}
@@ -102,12 +108,6 @@ export default async function ChatPage({ params, searchParams }: Props) {
         skillName={skill?.name ?? 'Skill'}
         skillIcon={skill?.icon}
         phase={userSkill.phase}
-      />
-      <AgentIntelPanelWrapper
-        intel={intel ?? null}
-        skillName={skill?.name ?? 'this skill'}
-        conversations={conversationPreviews}
-        activeConversationId={activeId}
       />
     </div>
   )

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/types'
-import { Send, Sparkles, Square, ArrowDown, AlertTriangle, X } from 'lucide-react'
+import { Send, Sparkles, Square, AlertTriangle, X } from 'lucide-react'
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
 
@@ -125,7 +125,6 @@ export default function ChatWindow({
   const [loading, setLoading] = useState(false)
   const [streaming, setStreaming] = useState('')
   const [streamTools, setStreamTools] = useState<ToolEvent[]>([])
-  const [showScrollDown, setShowScrollDown] = useState(false)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -151,13 +150,6 @@ export default function ChatWindow({
       if (nearBottom) scrollToBottom(false)
     }
   }, [streaming])
-
-  const onScroll = () => {
-    const el = scrollRef.current
-    if (!el) return
-    const farFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight > 400
-    setShowScrollDown(farFromBottom)
-  }
 
   // Auto-resize textarea
   useEffect(() => {
@@ -456,7 +448,7 @@ export default function ChatWindow({
       {/* Error banner */}
       {errorBanner && (
         <div className="px-4 lg:px-8 pt-3">
-          <div className="max-w-3xl mx-auto flex items-start gap-2.5 px-4 py-3 rounded-xl bg-brand-red/5 border border-brand-red/25 text-brand-red text-xs animate-fade-up">
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-brand-red/5 border border-brand-red/25 text-brand-red text-xs animate-fade-up">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div className="flex-1 leading-relaxed">
               <div className="font-black uppercase tracking-wider text-[10px] mb-0.5">
@@ -478,10 +470,9 @@ export default function ChatWindow({
       {/* Messages area */}
       <div
         ref={scrollRef}
-        onScroll={onScroll}
         className="flex-1 overflow-y-auto chat-scroll relative"
       >
-        <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 space-y-5">
+        <div className="px-4 lg:px-8 py-6 space-y-5">
           {showGreeting && (
             <div className="flex items-end gap-3 animate-fade-up">
               <CoachAvatar />
@@ -524,21 +515,11 @@ export default function ChatWindow({
 
           <div ref={bottomRef} />
         </div>
-
-        {showScrollDown && (
-          <button
-            onClick={() => scrollToBottom()}
-            className="absolute bottom-4 right-6 w-9 h-9 rounded-full bg-brand-dark text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
-            aria-label="Scroll to bottom"
-          >
-            <ArrowDown className="w-4 h-4" />
-          </button>
-        )}
       </div>
 
       {/* Suggestions for greeting */}
       {showGreeting && (
-        <div className="max-w-3xl mx-auto w-full px-4 lg:px-8 pb-3">
+        <div className="w-full px-4 lg:px-8 pb-3">
           <div className="flex items-center gap-2 mb-2 text-[10px] font-black text-muted-foreground uppercase tracking-[2px]">
             <Sparkles className="w-3 h-3" />
             Quick replies
@@ -559,7 +540,7 @@ export default function ChatWindow({
 
       {/* Input bar */}
       <div className="border-t border-card-border bg-white px-4 lg:px-8 py-4">
-        <div className="max-w-3xl mx-auto">
+        <div>
           <div className="flex gap-3 items-end">
             <div className="flex-1 relative">
               <textarea

@@ -120,7 +120,7 @@ export default function AgentIntelPanelWrapper({
 
   return (
     <>
-      <div className="hidden lg:flex flex-col w-80 border-l border-card-border bg-white overflow-hidden">
+      <div className="hidden lg:flex flex-col w-[360px] flex-shrink-0 border-r border-card-border bg-white overflow-hidden">
         <AgentIntelPanel
           intel={intel}
           skillName={skillName}
