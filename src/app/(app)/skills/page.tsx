@@ -23,9 +23,6 @@ export default async function SkillsPage() {
     .eq('is_active', true)
     .order('assigned_at', { ascending: false })
 
-  // Fetch available org skills not yet enrolled
-  const enrolledIds = (userSkills ?? []).map(us => us.skill_id)
-
   const { data: profile } = await supabase
     .from('users')
     .select('org_id')
@@ -41,6 +38,14 @@ export default async function SkillsPage() {
     .maybeSingle()
 
   const allowedSkillIds = ((groupRow as any)?.group?.default_skills ?? []) as string[]
+
+  const visibleUserSkills =
+    allowedSkillIds.length > 0
+      ? (userSkills ?? []).filter((us: any) => allowedSkillIds.includes(us.skill_id))
+      : (userSkills ?? [])
+
+  // Fetch available org skills not yet enrolled (within the visible set if group-scoped)
+  const enrolledIds = visibleUserSkills.map((us: any) => us.skill_id)
 
   let availableQuery = supabase
     .from('org_skills')
@@ -61,13 +66,13 @@ export default async function SkillsPage() {
         title="My Skills"
         rightSlot={
           <span className="text-xs text-muted-foreground font-semibold">
-            {(userSkills ?? []).length} active
+            {visibleUserSkills.length} active
           </span>
         }
       />
       <div className="flex-1 overflow-y-auto p-6">
         <SkillsGrid
-          userSkills={userSkills ?? []}
+          userSkills={visibleUserSkills}
           availableSkills={(availableSkills ?? []).map(s => s.skill).filter(Boolean) as any}
         />
       </div>
