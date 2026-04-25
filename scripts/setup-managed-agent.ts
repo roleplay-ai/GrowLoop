@@ -11,7 +11,16 @@
 //   NEXT_PUBLIC_SUPABASE_URL
 //   SUPABASE_SERVICE_ROLE_KEY    (service role — needed to write platform_agents)
 
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+// Load env vars: prefer .env.local (Next.js convention), then fall back to .env
+for (const file of ['.env.local', '.env']) {
+  const path = resolve(process.cwd(), file)
+  if (existsSync(path)) loadEnv({ path, override: false })
+}
+
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
