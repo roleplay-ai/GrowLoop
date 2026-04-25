@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 
-const COACH_MODEL = process.env.ANTHROPIC_COACH_MODEL ?? 'claude-sonnet-4-5'
+const COACH_MODEL = process.env.ANTHROPIC_COACH_MODEL ?? 'claude-haiku-4-5'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 

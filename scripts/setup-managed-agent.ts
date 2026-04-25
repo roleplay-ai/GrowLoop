@@ -68,7 +68,7 @@ async function main() {
   console.log('▶ Creating Nudge Coach agent…')
   const agent = await (client as any).beta.agents.create({
     name: 'Nudge Coach',
-    model: 'claude-opus-4-7',
+    model: 'claude-haiku-4-5',
     system: SYSTEM_PROMPT,
     tools: [{ type: 'agent_toolset_20260401' }],
   })
@@ -95,7 +95,7 @@ async function main() {
       agent_id: agent.id,
       agent_version: agent.version,
       environment_id: environment.id,
-      model: 'claude-opus-4-7',
+      model: 'claude-haiku-4-5',
       beta_header: 'managed-agents-2026-04-01',
       notes: 'Auto-provisioned by scripts/setup-managed-agent.ts',
     },
