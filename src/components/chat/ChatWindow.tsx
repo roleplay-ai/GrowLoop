@@ -11,11 +11,13 @@
 //     event bus
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/types'
-import { Send, Sparkles, Square, AlertTriangle, X } from 'lucide-react'
+import { Send, Sparkles, Square, AlertTriangle, X, LogOut } from 'lucide-react'
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
+import ConversationSummaryModal from './ConversationSummaryModal'
 import type { IntelProfile } from '@/lib/agent/slots'
 
 interface Props {
@@ -125,6 +127,8 @@ export default function ChatWindow({
 }: Props) {
   const phaseMeta = PHASE_META[phase]
   const supabase = createClient()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const [turns, setTurns] = useState<ChatTurn[]>(
     initialMessages.map((m) => ({
@@ -140,10 +144,12 @@ export default function ChatWindow({
   const [streamTools, setStreamTools] = useState<ToolEvent[]>([])
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
-  // The chat keeps a local mirror of the structured profile only so the
-  // side panel stays in sync — it doesn't drive any deterministic UI here.
+  // The chat keeps a local mirror of the structured profile so the
+  // side panel and the "End conversation" summary modal stay in sync.
   // Haiku is the source of truth for what to ask next.
-  const [, setProfile] = useState<IntelProfile>(initialProfile ?? {})
+  const [profile, setProfile] = useState<IntelProfile>(initialProfile ?? {})
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [startingNew, setStartingNew] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -302,6 +308,33 @@ export default function ChatWindow({
     setStreaming('')
   }
 
+  /**
+   * "End conversation" → "Start new conversation" flow. Creates a fresh
+   * conversation row for this user_skill and navigates to it. The current
+   * conversation is preserved as a past session (visible in the side panel).
+   */
+  async function handleStartNew() {
+    if (startingNew) return
+    setStartingNew(true)
+    try {
+      const res = await fetch('/api/conversations/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathname }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { id } = await res.json()
+      setSummaryOpen(false)
+      router.push(`${pathname}?c=${id}`)
+      router.refresh()
+    } catch (err) {
+      console.error('[start-new]', err)
+      setErrorBanner('Could not start a new conversation. Try again.')
+    } finally {
+      setStartingNew(false)
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-brand-cream/40">
       {/* Phase banner */}
@@ -324,6 +357,18 @@ export default function ChatWindow({
               </p>
             </div>
           </div>
+
+          {turns.length > 0 && (
+            <button
+              onClick={() => setSummaryOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-[1.2px] px-4 py-2 rounded-full bg-brand-red text-white border border-brand-red hover:bg-brand-red/90 hover:shadow-lg hover:shadow-brand-red/30 transition-all active:scale-95 shadow-md shadow-brand-red/25"
+              aria-label="End conversation"
+              title="End conversation and see summary"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              End conversation
+            </button>
+          )}
         </div>
       </div>
 
@@ -464,6 +509,18 @@ export default function ChatWindow({
           </p>
         </div>
       </div>
+
+      <ConversationSummaryModal
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        profile={profile}
+        userSkillId={userSkillId}
+        skillName={skillName}
+        skillIcon={skillIcon}
+        turnCount={turns.length}
+        onStartNew={handleStartNew}
+        starting={startingNew}
+      />
     </div>
   )
 }
