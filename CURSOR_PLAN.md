@@ -297,31 +297,42 @@ Prompt: "Build src/app/(hr)/groups/page.tsx:
 
 ---
 
-## PHASE 6 — Skills Library (Admin)
+## PHASE 6 — Skills Library (Admin) ✅ COMPLETED
 **Session goal:** Super Admin manages platform skills; HR clones/customizes for org
 
-### Steps for Cursor
+### Deliverables
 
-**6.1 Super Admin skills page**
-```
-Prompt: "Build src/app/(super-admin)/skills/page.tsx:
-1. Grid of platform skills with name, icon, dimension count, usage count
-2. CreateSkillModal: name, icon (emoji picker), description, category
-3. DimensionsEditor: add/edit up to 6 dimensions (name + description + 5-level rubric)
-4. Archive skill action
-5. CSV import for bulk skill creation
-All mutations in src/app/(super-admin)/skills/actions.ts"
-```
+**6.1 Super Admin Skills Library** (`/admin-skills`)
+- Server actions in `src/app/(super-admin)/admin-skills/actions.ts`:
+  `createPlatformSkill`, `updatePlatformSkill`, `archivePlatformSkill`, `duplicatePlatformSkill`.
+  Every mutation goes through `verifySuperAdmin()` + writes an `audit_log` entry.
+- `src/app/(super-admin)/admin-skills/page.tsx` server-renders all platform skills enriched
+  with `org_clones` (rows in `org_skills`) and `active_users` (rows in `user_skills`).
+- `src/components/super-admin/SkillsLibrary.tsx`: stat row, Active/Archived tabs, search,
+  responsive grid of skill cards. Each card shows icon, name, description, dimension count,
+  org clone count, active learners — with Edit / Duplicate / Archive actions.
 
-**6.2 HR skills page**
-```
-Prompt: "Build src/app/(hr)/skills/page.tsx:
-1. Split view: Platform Skills (read-only) | Our Skills (org-scoped)
-2. 'Clone to org' button on platform skills → copies skill row with org_id set, source='org_custom'
-3. Edit cloned skills (dimensions, description)
-4. Enable/disable skills for org via org_skills table
-5. 'Feature this skill' toggle (recommended to participants)"
-```
+**6.2 HR Skills page** (`/hr-skills`)
+- Server actions in `src/app/(hr)/hr-skills/actions.ts`:
+  `setPlatformSkillEnabled`, `cloneSkillToOrg`, `createOrgSkill`, `updateOrgSkill`,
+  `archiveOrgSkill`. All HR-scoped via `verifyHR()` + audited.
+- `src/app/(hr)/hr-skills/page.tsx` loads (a) platform catalogue + per-org enabled flags
+  from `org_skills`, and (b) org-custom skills with active-learner counts.
+- `src/components/hr/HRSkillsBrowser.tsx`: tabbed view — **Platform Catalogue** (read-only,
+  toggle Enable/Disable, Preview rubric, Clone to org) | **Our Skills** (custom skills the
+  HR fully owns: edit / archive / create from scratch).
+
+**Shared editor**
+- `src/components/skills/SkillEditorModal.tsx`: 24-icon emoji picker, name + description
+  with character counters, up to 6 dimensions each with a collapsible 5-level rubric editor,
+  validation, optimistic save state, error banner. Used by both Super Admin and HR.
+
+### Notes
+- Sidebar entry `Skills → /hr-skills` was already wired (`HRSidebar`); middleware allow-list
+  already includes `/admin-skills` and `/hr-skills`.
+- `org_skills(org_id, skill_id, enabled)` uses composite primary key — toggling enable/disable
+  is an upsert with `onConflict: 'org_id,skill_id'`.
+- Cloning a platform skill regenerates dimension UUIDs to avoid cross-skill ID collisions.
 
 ---
 
