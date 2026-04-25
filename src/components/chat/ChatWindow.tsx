@@ -211,6 +211,7 @@ export default function ChatWindow({
       setTurns((prev) => [...prev, assistantTurn])
       setStreaming('')
       setStreamTools([])
+      triggerIntelExtraction()
     } else {
       // error
       setLoading(false)
@@ -278,6 +279,8 @@ export default function ChatWindow({
           { conversation_id: conversationId, role: 'user', content },
           { conversation_id: conversationId, role: 'assistant', content: fullText },
         ])
+
+        triggerIntelExtraction()
       } catch (err: any) {
         if (err?.name === 'AbortError') {
           // user-cancelled; no banner
@@ -395,6 +398,34 @@ export default function ChatWindow({
     abortRef.current?.abort()
     setLoading(false)
     setStreaming('')
+  }
+
+  /**
+   * Fire-and-forget call after each completed assistant turn. Re-runs the
+   * intel extractor server-side and broadcasts the merged result so the
+   * Coach Memory panel can update live without a page refresh.
+   */
+  function triggerIntelExtraction() {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new CustomEvent('agent-intel:capturing'))
+    fetch('/api/intel/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userSkillId, conversationId }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`intel extract HTTP ${r.status}`)
+        const j = await r.json()
+        if (j?.intel) {
+          window.dispatchEvent(
+            new CustomEvent('agent-intel:update', { detail: j.intel }),
+          )
+        }
+      })
+      .catch((err) => {
+        console.warn('[intel] extraction failed:', err?.message ?? err)
+        window.dispatchEvent(new CustomEvent('agent-intel:capture-failed'))
+      })
   }
 
   return (

@@ -1,5 +1,5 @@
 'use client'
-import { Brain, Lightbulb, AlertCircle, Target, RefreshCw, Lock } from 'lucide-react'
+import { Brain, Lightbulb, AlertCircle, Target, RefreshCw, Lock, Sparkles } from 'lucide-react'
 
 interface AgentIntel {
   current_level?: string | null
@@ -10,6 +10,8 @@ interface AgentIntel {
   updated_at?: string
 }
 
+type IntelKey = 'current_level' | 'context' | 'motivations' | 'blockers' | 'raw_summary'
+
 interface Props {
   intel: AgentIntel | null
   skillName: string
@@ -17,6 +19,10 @@ interface Props {
   activeConversationId?: string
   onPickConversation?: (id: string) => void
   onNewConversation?: () => void
+  /** True while a background extraction call is in flight. */
+  capturing?: boolean
+  /** Keys whose value changed in the latest extraction; used for a brief flash. */
+  recentlyCaptured?: IntelKey[]
 }
 
 const PHASE_DOT: Record<string, string> = {
@@ -32,6 +38,8 @@ export default function AgentIntelPanel({
   activeConversationId,
   onPickConversation,
   onNewConversation,
+  capturing = false,
+  recentlyCaptured = [],
 }: Props) {
   const hasIntel =
     intel &&
@@ -40,6 +48,8 @@ export default function AgentIntelPanel({
       intel.motivations?.length ||
       intel.blockers?.length ||
       intel.raw_summary)
+
+  const isFresh = (k: IntelKey) => recentlyCaptured.includes(k)
 
   return (
     <>
@@ -50,10 +60,17 @@ export default function AgentIntelPanel({
             <Brain className="w-3.5 h-3.5 text-brand-purple" />
           </div>
           <h3 className="text-xs font-black uppercase tracking-[2px] text-brand-dark">Coach Memory</h3>
+          {capturing && (
+            <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-[1.5px] text-brand-purple bg-brand-purple/10 border border-brand-purple/25 rounded-full px-2 py-0.5">
+              <Sparkles className="w-2.5 h-2.5 animate-pulse" />
+              Capturing
+            </span>
+          )}
         </div>
         <p className="text-[11px] text-muted-foreground leading-snug">
-          What Nudge has learned about you for{' '}
-          <span className="font-bold text-brand-dark">{skillName}</span>
+          Your coach captures context as you chat. It{' '}
+          <span className="font-bold text-brand-dark">tailors every reply</span> to{' '}
+          <span className="font-bold text-brand-dark">{skillName}</span>.
         </p>
       </div>
 
@@ -78,6 +95,7 @@ export default function AgentIntelPanel({
                   icon={<Target className="w-3.5 h-3.5" />}
                   label="Current Level"
                   color="text-brand-purple bg-brand-purple/10"
+                  fresh={isFresh('current_level')}
                 >
                   <p className="text-xs text-brand-dark leading-relaxed">{intel.current_level}</p>
                 </IntelBlock>
@@ -88,6 +106,7 @@ export default function AgentIntelPanel({
                   icon={<Brain className="w-3.5 h-3.5" />}
                   label="Context"
                   color="text-brand-dark bg-brand-cream"
+                  fresh={isFresh('context')}
                 >
                   <p className="text-xs text-brand-dark leading-relaxed">{intel.context}</p>
                 </IntelBlock>
@@ -98,6 +117,7 @@ export default function AgentIntelPanel({
                   icon={<Lightbulb className="w-3.5 h-3.5" />}
                   label="Motivations"
                   color="text-brand-yellow bg-brand-yellow/15"
+                  fresh={isFresh('motivations')}
                 >
                   <ul className="space-y-1">
                     {intel.motivations.map((m, i) => (
@@ -115,6 +135,7 @@ export default function AgentIntelPanel({
                   icon={<AlertCircle className="w-3.5 h-3.5" />}
                   label="Blockers"
                   color="text-brand-red bg-brand-red/10"
+                  fresh={isFresh('blockers')}
                 >
                   <ul className="space-y-1">
                     {intel.blockers.map((b, i) => (
@@ -227,19 +248,32 @@ function IntelBlock({
   label,
   color,
   children,
+  fresh = false,
 }: {
   icon: React.ReactNode
   label: string
   color: string
   children: React.ReactNode
+  fresh?: boolean
 }) {
   return (
-    <div>
+    <div
+      className={
+        fresh
+          ? 'rounded-lg -mx-1 px-1 py-1 ring-2 ring-brand-yellow/70 bg-brand-yellow/5 shadow-glow-yellow transition-all duration-500 animate-pop-in'
+          : 'rounded-lg transition-all duration-500'
+      }
+    >
       <div className="flex items-center gap-2 mb-1.5">
         <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${color}`}>{icon}</div>
         <span className="text-[10px] font-black uppercase tracking-[1.5px] text-muted-foreground">
           {label}
         </span>
+        {fresh && (
+          <span className="text-[8px] font-black uppercase tracking-[1.5px] text-brand-yellow bg-brand-yellow/15 border border-brand-yellow/40 rounded-full px-1.5 py-px">
+            Just captured
+          </span>
+        )}
       </div>
       <div className="pl-1">{children}</div>
     </div>
