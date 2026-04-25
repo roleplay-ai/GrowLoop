@@ -265,6 +265,38 @@ Prompt: "Build src/app/(hr)/groups/page.tsx:
 
 ---
 
+## PHASE 5.5 — AI Coach Agent UI (Managed Agents) ✅ COMPLETED
+**Session goal:** Beautiful chat experience backed by Anthropic Managed Agents with persistent memory
+
+### Deliverables
+
+**Priority 1 — Visible UI**
+- `src/components/chat/Markdown.tsx` — themed markdown renderer (lists, code, links, blockquote)
+- `src/components/chat/ToolUseCard.tsx` — collapsible cards for `agent.tool_use` events (memory read/write, web search, bash, etc.)
+- `src/components/chat/ChatWindow.tsx` — full rewrite: phase pill, smart scroll, abort button, suggestions, animated avatars, typing dots, NDJSON event parser with graceful fallback to legacy endpoint
+- `src/components/chat/AgentIntelPanel.tsx` — side panel showing what the coach has learned (level, context, motivations, blockers) + session history with phase dots
+- `src/components/chat/AgentIntelPanelWrapper.tsx` — client wrapper that handles conversation switching and a "View raw memory files" trigger
+- `src/app/(app)/skills/[userSkillId]/chat/page.tsx` — fetches intel + all conversations + previews; supports `?c=<id>` deep-link to switch conversations
+- `src/app/api/conversations/new/route.ts` — creates a fresh conversation in the same userSkill
+
+**Priority 2 — Managed Agents wiring**
+- `supabase/migrations/0002_managed_agents.sql` — `platform_agents` registry, `users.memory_store_id`, `conversations.session_id` + status, `messages.tool_events`
+- `src/lib/anthropic/managedAgents.ts` — thin SDK wrapper for `memoryStores.create`, `sessions.create`, and a normalised event stream generator
+- `src/app/api/agents/chat/route.ts` — Sessions-API chat route with lazy memory store + session provisioning, NDJSON streaming, and message persistence
+- `scripts/setup-managed-agent.ts` + `npm run agent:setup` — bootstrap the platform Agent ("Nudge Coach", `claude-opus-4-7`, full agent toolset) and Cloud Environment, then upserts ids into `platform_agents.default`
+
+**Priority 3 — Transparency**
+- `src/app/api/agents/memory/route.ts` — list + retrieve the user's memory files (read-only)
+- `src/components/chat/MemoryViewer.tsx` — modal viewer that lets the participant read every memory file the coach has written about them
+
+### How it runs end-to-end
+1. `npm run agent:setup` once (writes `platform_agents.default`).
+2. Participant opens a skill chat → first POST to `/api/agents/chat` lazily provisions their `memstore_…` and a `session_…` for that conversation.
+3. NDJSON events stream back: `text`, `tool_use`, `tool_result`, `idle`. UI renders live.
+4. If `platform_agents` is empty → API returns 503; UI silently falls back to the existing `/api/chat` (Messages API) so the product never breaks.
+
+---
+
 ## PHASE 6 — Skills Library (Admin)
 **Session goal:** Super Admin manages platform skills; HR clones/customizes for org
 

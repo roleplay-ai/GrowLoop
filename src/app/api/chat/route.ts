@@ -3,6 +3,8 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 
+const COACH_MODEL = process.env.ANTHROPIC_COACH_MODEL ?? 'claude-sonnet-4-5'
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const PHASE_PROMPTS: Record<string, string> = {
@@ -23,6 +25,16 @@ Be encouraging and specific.`,
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'AI coach is not configured: ANTHROPIC_API_KEY is missing. Set it in .env.local and restart the dev server.',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return new Response('Unauthorized', { status: 401 })
@@ -53,52 +65,85 @@ export async function POST(req: NextRequest) {
       { role: 'user' as const, content: message },
     ]
 
-    // Stream response
-    const stream = await anthropic.messages.stream({
-      model:      'claude-sonnet-4-20250514',
-      max_tokens: 800,
-      system:     systemPrompt,
-      messages,
-    })
-
-    // Log LLM usage after stream completes (fire and forget)
-    stream.finalMessage().then(async finalMsg => {
-      const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
-      await supabase.from('llm_usage').insert({
-        org_id:     profile?.org_id,
-        user_id:    user.id,
-        model:      'claude-sonnet-4-20250514',
-        tokens_in:  finalMsg.usage.input_tokens,
-        tokens_out: finalMsg.usage.output_tokens,
-        cost_cents: ((finalMsg.usage.input_tokens * 0.003 + finalMsg.usage.output_tokens * 0.015) / 1000).toFixed(4),
-        feature:    'coach',
+    let stream
+    try {
+      stream = await anthropic.messages.stream({
+        model: COACH_MODEL,
+        max_tokens: 800,
+        system: systemPrompt,
+        messages,
       })
-    }).catch(console.error)
+    } catch (err: any) {
+      const status = err?.status ?? 500
+      const friendly =
+        status === 401
+          ? 'AI coach auth failed: your ANTHROPIC_API_KEY appears invalid. Update .env.local and restart the dev server.'
+          : status === 404
+            ? `AI coach model "${COACH_MODEL}" was not found. Set ANTHROPIC_COACH_MODEL in .env.local to a model your account has access to.`
+            : err?.message ?? 'Failed to start coach stream'
+      console.error('[/api/chat] start:', status, err?.message)
+      return new Response(JSON.stringify({ error: friendly }), {
+        status: status === 401 ? 401 : 503,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
-    // Return streaming text
+    stream
+      .finalMessage()
+      .then(async (finalMsg) => {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('org_id')
+          .eq('id', user.id)
+          .single()
+        await supabase.from('llm_usage').insert({
+          org_id: profile?.org_id,
+          user_id: user.id,
+          model: COACH_MODEL,
+          tokens_in: finalMsg.usage.input_tokens,
+          tokens_out: finalMsg.usage.output_tokens,
+          cost_cents: (
+            (finalMsg.usage.input_tokens * 0.003 + finalMsg.usage.output_tokens * 0.015) /
+            1000
+          ).toFixed(4),
+          feature: 'coach',
+        })
+      })
+      .catch(console.error)
+
     const readable = new ReadableStream({
       async start(controller) {
-        for await (const chunk of stream) {
-          if (
-            chunk.type === 'content_block_delta' &&
-            chunk.delta.type === 'text_delta'
-          ) {
-            controller.enqueue(new TextEncoder().encode(chunk.delta.text))
+        try {
+          for await (const chunk of stream) {
+            if (
+              chunk.type === 'content_block_delta' &&
+              chunk.delta.type === 'text_delta'
+            ) {
+              controller.enqueue(new TextEncoder().encode(chunk.delta.text))
+            }
           }
+        } catch (err: any) {
+          // Mid-stream failure — surface a readable note in the body
+          const note = `\n\n[Coach stream interrupted: ${err?.message ?? 'unknown error'}]`
+          controller.enqueue(new TextEncoder().encode(note))
+        } finally {
+          controller.close()
         }
-        controller.close()
       },
     })
 
     return new Response(readable, {
       headers: {
-        'Content-Type':  'text/plain; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         'X-Accel-Buffering': 'no',
       },
     })
-  } catch (err) {
+  } catch (err: any) {
     console.error('[/api/chat]', err)
-    return new Response('Internal Server Error', { status: 500 })
+    return new Response(
+      JSON.stringify({ error: err?.message ?? 'Internal Server Error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 }
