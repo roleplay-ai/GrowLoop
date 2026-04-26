@@ -1,5 +1,5 @@
 // src/app/(hr)/groups/page.tsx
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import GroupsManager from '@/components/hr/GroupsManager'
 import type { Metadata } from 'next'
@@ -13,7 +13,9 @@ export default async function GroupsPage() {
   if (!user) redirect('/login')
   const { data: profile } = await supabase.from('users').select('org_id').eq('id', user.id).single()
 
-  const [{ data: groups }, { data: participants }, { data: enabledSkills }] = await Promise.all([
+  const service = await createServiceClient()
+
+  const [{ data: groups }, { data: participants }, { data: platformSkillRows }, { data: orgCustomSkills }] = await Promise.all([
     supabase
       .from('groups')
       .select('*, group_members(user_id)')
@@ -26,13 +28,24 @@ export default async function GroupsPage() {
       .eq('role', 'participant')
       .eq('status', 'active')
       .order('name'),
-    supabase
+    service
       .from('org_skills')
       .select('skill:skills(id, name, icon, description)')
       .eq('org_id', profile?.org_id)
-      .eq('enabled', true)
-      .order('added_at', { ascending: false }),
+      .eq('enabled', true),
+    service
+      .from('skills')
+      .select('id, name, icon, description')
+      .eq('source', 'org_custom')
+      .eq('org_id', profile?.org_id)
+      .eq('is_archived', false)
+      .order('name'),
   ])
+
+  const enabledSkills = [
+    ...(platformSkillRows ?? []).map((r: any) => r.skill).filter(Boolean),
+    ...(orgCustomSkills ?? []),
+  ]
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -41,7 +54,7 @@ export default async function GroupsPage() {
         <GroupsManager
           groups={groups ?? []}
           participants={participants ?? []}
-          enabledSkills={(enabledSkills ?? []).map((r: any) => r.skill).filter(Boolean)}
+          enabledSkills={enabledSkills}
         />
       </main>
     </div>

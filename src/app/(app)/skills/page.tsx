@@ -1,5 +1,5 @@
 // src/app/(app)/skills/page.tsx
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import SkillsGrid from '@/components/skills/SkillsGrid'
 import type { Metadata } from 'next'
@@ -46,19 +46,39 @@ export default async function SkillsPage() {
 
   // Fetch available org skills not yet enrolled (within the visible set if group-scoped)
   const enrolledIds = visibleUserSkills.map((us: any) => us.skill_id)
+  const excludeParam = enrolledIds.length ? enrolledIds.join(',') : '00000000-0000-0000-0000-000000000000'
 
-  let availableQuery = supabase
+  const service = await createServiceClient()
+
+  let platformQuery = service
     .from('org_skills')
     .select('skill:skills(id, name, icon, description)')
     .eq('org_id', profile?.org_id)
     .eq('enabled', true)
-    .not('skill_id', 'in', `(${enrolledIds.length ? enrolledIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
+    .not('skill_id', 'in', `(${excludeParam})`)
+
+  let customQuery = service
+    .from('skills')
+    .select('id, name, icon, description')
+    .eq('source', 'org_custom')
+    .eq('org_id', profile?.org_id)
+    .eq('is_archived', false)
+    .not('id', 'in', `(${excludeParam})`)
 
   if (allowedSkillIds.length > 0) {
-    availableQuery = availableQuery.in('skill_id', allowedSkillIds)
+    platformQuery = platformQuery.in('skill_id', allowedSkillIds)
+    customQuery = customQuery.in('id', allowedSkillIds)
   }
 
-  const { data: availableSkills } = await availableQuery
+  const [{ data: platformSkills }, { data: orgCustomSkills }] = await Promise.all([
+    platformQuery,
+    customQuery,
+  ])
+
+  const allAvailableSkills = [
+    ...(platformSkills ?? []).map((s: any) => s.skill).filter(Boolean),
+    ...(orgCustomSkills ?? []),
+  ]
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -73,7 +93,7 @@ export default async function SkillsPage() {
       <div className="flex-1 overflow-y-auto p-6">
         <SkillsGrid
           userSkills={visibleUserSkills}
-          availableSkills={(availableSkills ?? []).map(s => s.skill).filter(Boolean) as any}
+          availableSkills={allAvailableSkills as any}
         />
       </div>
     </div>

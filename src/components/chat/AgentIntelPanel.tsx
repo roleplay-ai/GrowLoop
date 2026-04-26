@@ -11,6 +11,7 @@
 // in sync.
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { Lock, Sparkles, Pencil, Check, X, RefreshCw } from 'lucide-react'
 import {
   SLOTS,
@@ -131,6 +132,33 @@ export default function AgentIntelPanel({
             </div>
           )
         })}
+
+        {/* Reality Check CTA — shown when every intel slot is captured */}
+        {captured >= total && (
+          <div
+            className="mx-0.5 mb-3 rounded-xl p-3.5 border border-brand-green/40 animate-fade-up"
+            style={{
+              background: 'linear-gradient(135deg,#F0FFF7 0%,#E8F5FF 100%)',
+            }}
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-sm">🎉</span>
+              <span className="text-[10px] font-extrabold tracking-[0.15em] uppercase text-brand-green">
+                Intel complete!
+              </span>
+            </div>
+            <p className="text-[11px] text-brand-dark leading-snug mb-3">
+              Your coach knows you well enough to run a <strong>Reality Check</strong> — get real
+              peer feedback on how you&apos;re showing up.
+            </p>
+            <Link
+              href={`/skills/${userSkillId}/reality-check`}
+              className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-brand-green text-white text-[11px] font-black hover:bg-brand-green/90 active:scale-[0.98] transition-all"
+            >
+              🪞 Start Reality Check
+            </Link>
+          </div>
+        )}
 
         {/* Sessions list */}
         <div className="mt-5 pt-4 border-t border-card-border">

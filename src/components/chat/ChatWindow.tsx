@@ -18,7 +18,8 @@ import { Send, Sparkles, Square, AlertTriangle, X, LogOut } from 'lucide-react'
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
 import ConversationSummaryModal from './ConversationSummaryModal'
-import type { IntelProfile } from '@/lib/agent/slots'
+import Link from 'next/link'
+import { countCaptured, type IntelProfile } from '@/lib/agent/slots'
 
 interface Props {
   userSkillId: string
@@ -432,6 +433,32 @@ export default function ChatWindow({
               <CoachAvatar />
               <div className="bg-white border border-card-border rounded-2xl rounded-bl-sm px-4 py-3 shadow-card">
                 <TypingDots />
+              </div>
+            </div>
+          )}
+
+          {/* Reality Check nudge — shown once all intel slots are captured */}
+          {phase === 'pre' && countCaptured(profile).captured >= countCaptured(profile).total && (
+            <div className="flex items-end gap-3 animate-fade-up">
+              <CoachAvatar />
+              <div
+                className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-3.5 text-sm leading-relaxed shadow-card border border-brand-green/30"
+                style={{ background: 'linear-gradient(135deg,#F0FFF7 0%,#E8F5FF 100%)' }}
+              >
+                <div className="text-[10px] font-extrabold tracking-[0.15em] uppercase text-brand-green mb-1.5">
+                  🎉 You&apos;re ready!
+                </div>
+                <p className="text-sm text-brand-dark leading-snug mb-3">
+                  I&apos;ve got a solid picture of where you&apos;re at. The next step is a{' '}
+                  <strong>Reality Check</strong> — I&apos;ll help you gather anonymous feedback
+                  from colleagues so you can see how you&apos;re really showing up.
+                </p>
+                <Link
+                  href={`/skills/${userSkillId}/reality-check`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-green text-white text-sm font-black hover:bg-brand-green/90 active:scale-[0.98] transition-all shadow-sm shadow-brand-green/30"
+                >
+                  🪞 Start Reality Check
+                </Link>
               </div>
             </div>
           )}
