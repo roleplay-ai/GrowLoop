@@ -6,13 +6,13 @@
 //   (formData: FormData) => Promise<{ success: boolean; error?: string }>
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle, Sparkles } from 'lucide-react'
+import { X, Plus, Trash2, AlertCircle, Sparkles } from 'lucide-react'
 
 interface Dimension {
   id: string
   name: string
-  description: string
-  rubric: { '1': string; '2': string; '3': string; '4': string; '5': string }
+  description?: string
+  rubric?: { '1': string; '2': string; '3': string; '4': string; '5': string }
 }
 
 interface Skill {
@@ -46,8 +46,6 @@ function newDimension(): Dimension {
         ? crypto.randomUUID()
         : `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`),
     name: '',
-    description: '',
-    rubric: { '1': '', '2': '', '3': '', '4': '', '5': '' },
   }
 }
 
@@ -64,7 +62,6 @@ export default function SkillEditorModal({
   const [icon, setIcon] = useState('🧠')
   const [description, setDescription] = useState('')
   const [dimensions, setDimensions] = useState<Dimension[]>([])
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -78,17 +75,8 @@ export default function SkillEditorModal({
     const initial = (skill?.dimensions ?? []).map((d) => ({
       id: d.id,
       name: d.name ?? '',
-      description: d.description ?? '',
-      rubric: {
-        '1': d.rubric?.['1'] ?? '',
-        '2': d.rubric?.['2'] ?? '',
-        '3': d.rubric?.['3'] ?? '',
-        '4': d.rubric?.['4'] ?? '',
-        '5': d.rubric?.['5'] ?? '',
-      },
     }))
     setDimensions(initial)
-    setExpanded(initial.length === 1 ? { [initial[0].id]: true } : {})
     setError(null)
     setShowEmojiPicker(false)
   }, [open, skill])
@@ -108,29 +96,17 @@ export default function SkillEditorModal({
   if (!open) return null
 
   function addDimension() {
-    if (dimensions.length >= 6) {
-      setError('Maximum of 6 dimensions per skill')
-      return
-    }
     const dim = newDimension()
     setDimensions((d) => [...d, dim])
-    setExpanded((e) => ({ ...e, [dim.id]: true }))
     setError(null)
   }
 
   function removeDimension(id: string) {
     setDimensions((d) => d.filter((x) => x.id !== id))
-    setExpanded(({ [id]: _, ...rest }) => rest)
   }
 
   function updateDim(id: string, patch: Partial<Dimension>) {
     setDimensions((d) => d.map((x) => (x.id === id ? { ...x, ...patch } : x)))
-  }
-
-  function updateRubric(id: string, level: '1' | '2' | '3' | '4' | '5', value: string) {
-    setDimensions((d) =>
-      d.map((x) => (x.id === id ? { ...x, rubric: { ...x.rubric, [level]: value } } : x)),
-    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -144,7 +120,6 @@ export default function SkillEditorModal({
     const incompleteDim = dimensions.find((d) => !d.name.trim())
     if (incompleteDim) {
       setError('All dimensions need a name')
-      setExpanded((e) => ({ ...e, [incompleteDim.id]: true }))
       return
     }
 
@@ -178,7 +153,7 @@ export default function SkillEditorModal({
                 {title ?? (skill?.id ? 'Edit skill' : 'Create new skill')}
               </h2>
               <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {subtitle ?? 'Define the skill, then up to 6 dimensions with a 5-level rubric.'}
+                {subtitle ?? 'Define the skill and add as many dimensions as you need (each rated 1–5).'}
               </p>
             </div>
           </div>
@@ -276,17 +251,16 @@ export default function SkillEditorModal({
                     Dimensions
                   </h3>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Up to 6 sub-aspects of this skill (peers will rate each on a 1–5 rubric).
+                    Sub-aspects peers will rate 1–5. Add as many as you need.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={addDimension}
-                  disabled={dimensions.length >= 6}
-                  className="text-xs font-bold text-brand-purple hover:bg-brand-purple/5 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-xs font-bold text-brand-purple hover:bg-brand-purple/5 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add dimension ({dimensions.length}/6)
+                  Add dimension
                 </button>
               </div>
 
@@ -303,13 +277,8 @@ export default function SkillEditorModal({
                       key={dim.id}
                       dim={dim}
                       index={idx}
-                      isExpanded={!!expanded[dim.id]}
-                      onToggle={() =>
-                        setExpanded((e) => ({ ...e, [dim.id]: !e[dim.id] }))
-                      }
                       onRemove={() => removeDimension(dim.id)}
                       onUpdate={(patch) => updateDim(dim.id, patch)}
-                      onUpdateRubric={(lvl, v) => updateRubric(dim.id, lvl, v)}
                     />
                   ))}
                 </div>
@@ -320,16 +289,7 @@ export default function SkillEditorModal({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-card-border flex items-center justify-between bg-brand-cream/30 flex-shrink-0">
             <p className="text-[10px] text-muted-foreground/70 font-mono">
-              {dimensions.length} dimension{dimensions.length === 1 ? '' : 's'} ·{' '}
-              {dimensions.reduce(
-                (sum, d) =>
-                  sum +
-                  ['1', '2', '3', '4', '5'].filter(
-                    (l) => (d.rubric as any)[l]?.trim().length > 0,
-                  ).length,
-                0,
-              )}{' '}
-              rubric levels filled
+              {dimensions.length} dimension{dimensions.length === 1 ? '' : 's'} · each rated 1–5
             </p>
             <div className="flex gap-2">
               <button
@@ -361,100 +321,45 @@ export default function SkillEditorModal({
 function DimensionCard({
   dim,
   index,
-  isExpanded,
-  onToggle,
   onRemove,
   onUpdate,
-  onUpdateRubric,
 }: {
   dim: Dimension
   index: number
-  isExpanded: boolean
-  onToggle: () => void
   onRemove: () => void
   onUpdate: (p: Partial<Dimension>) => void
-  onUpdateRubric: (level: '1' | '2' | '3' | '4' | '5', value: string) => void
 }) {
   return (
-    <div className="border border-card-border rounded-xl bg-white overflow-hidden transition-all">
-      <div className="flex items-center gap-2 p-3 border-b border-card-border">
-        <span className="w-6 h-6 rounded-md bg-brand-purple/10 text-brand-purple text-[10px] font-black flex items-center justify-center flex-shrink-0">
-          {index + 1}
-        </span>
-        <input
-          type="text"
-          value={dim.name}
-          onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="Dimension name (e.g. Active listening)"
-          maxLength={60}
-          className="flex-1 px-2 py-1 text-sm font-bold text-brand-dark bg-transparent placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/30 rounded-md"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          className="w-7 h-7 rounded-md hover:bg-brand-cream flex items-center justify-center text-muted-foreground"
-          aria-label={isExpanded ? 'Collapse' : 'Expand'}
-        >
-          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="w-7 h-7 rounded-md hover:bg-brand-red/10 hover:text-brand-red flex items-center justify-center text-muted-foreground transition-colors"
-          aria-label="Remove dimension"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {isExpanded && (
-        <div className="p-3 space-y-3 bg-brand-cream/20">
-          <div>
-            <label className="block text-[9px] font-black text-muted-foreground mb-1 uppercase tracking-[1.5px]">
-              What this dimension is
-            </label>
-            <textarea
-              value={dim.description}
-              onChange={(e) => onUpdate({ description: e.target.value })}
-              placeholder="e.g. The ability to fully focus on what someone is saying without planning your response."
-              rows={2}
-              maxLength={500}
-              className="w-full px-3 py-2 rounded-md border border-border bg-white text-xs text-brand-dark placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[9px] font-black text-muted-foreground mb-1.5 uppercase tracking-[1.5px]">
-              5-level rubric
-            </label>
-            <div className="space-y-1.5">
-              {(['1', '2', '3', '4', '5'] as const).map((lvl) => (
-                <div key={lvl} className="flex gap-2 items-start">
-                  <span className="w-6 h-6 rounded bg-brand-yellow/15 text-brand-dark text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {lvl}
-                  </span>
-                  <input
-                    type="text"
-                    value={dim.rubric[lvl]}
-                    onChange={(e) => onUpdateRubric(lvl, e.target.value)}
-                    placeholder={`Level ${lvl}: ${
-                      lvl === '1'
-                        ? 'rarely demonstrated'
-                        : lvl === '3'
-                          ? 'consistent baseline'
-                          : lvl === '5'
-                            ? 'role-models for others'
-                            : '...'
-                    }`}
-                    maxLength={300}
-                    className="flex-1 px-3 py-1.5 rounded-md border border-border bg-white text-xs text-brand-dark placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="flex items-center gap-2 border border-card-border rounded-xl bg-white px-3 py-2.5">
+      <span className="w-6 h-6 rounded-md bg-brand-purple/10 text-brand-purple text-[10px] font-black flex items-center justify-center flex-shrink-0">
+        {index + 1}
+      </span>
+      <input
+        type="text"
+        value={dim.name}
+        onChange={(e) => onUpdate({ name: e.target.value })}
+        placeholder="Dimension name (e.g. Active listening)"
+        maxLength={80}
+        className="flex-1 px-2 py-1 text-sm font-bold text-brand-dark bg-transparent placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/30 rounded-md"
+      />
+      <span className="flex items-center gap-0.5 flex-shrink-0">
+        {(['1', '2', '3', '4', '5'] as const).map((lvl) => (
+          <span
+            key={lvl}
+            className="w-5 h-5 rounded bg-brand-yellow/15 text-brand-dark text-[9px] font-black flex items-center justify-center"
+          >
+            {lvl}
+          </span>
+        ))}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="w-7 h-7 rounded-md hover:bg-brand-red/10 hover:text-brand-red flex items-center justify-center text-muted-foreground transition-colors flex-shrink-0"
+        aria-label="Remove dimension"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
     </div>
   )
 }
