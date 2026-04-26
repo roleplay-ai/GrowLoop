@@ -14,7 +14,6 @@ import { useRouter } from 'next/navigation'
 import type { SkillDimension } from '@/lib/types'
 import SelfRatingForm from '@/components/chat/SelfRatingForm'
 import PeerSelectForm from '@/components/chat/PeerSelectForm'
-import { RELATION_LABELS } from '@/lib/reality-check/helpers'
 
 export interface RCOrchestratorInvite {
   id: string
@@ -56,7 +55,6 @@ export default function RealityCheckOrchestrator({
   const router = useRouter()
   const [closing, setClosing] = useState(false)
   const [closeError, setCloseError] = useState<string | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
 
   const submittedCount = useMemo(
     () => invites.filter((i) => i.status === 'submitted').length,
@@ -88,16 +86,6 @@ export default function RealityCheckOrchestrator({
     } finally {
       setClosing(false)
     }
-  }
-
-  function copyLink(url: string) {
-    navigator.clipboard.writeText(url).then(
-      () => {
-        setCopied(url)
-        setTimeout(() => setCopied(null), 1500)
-      },
-      () => undefined,
-    )
   }
 
   return (
@@ -190,40 +178,30 @@ export default function RealityCheckOrchestrator({
               </span>
             </div>
 
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
               {invites.map((inv) => {
                 const submitted = inv.status === 'submitted'
-                const relLabel = inv.peer_relation
-                  ? RELATION_LABELS[inv.peer_relation] ?? inv.peer_relation
-                  : 'Peer'
                 return (
                   <div
                     key={inv.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${
                       submitted
                         ? 'border-brand-green/30 bg-brand-green/5'
                         : 'border-card-border bg-white'
                     }`}
                   >
-                    <div className="text-2xl">{submitted ? '✅' : '⏳'}</div>
+                    <span className="text-base">{submitted ? '✅' : '⏳'}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-brand-dark truncate">
                         {inv.peer_name || inv.peer_email}
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate">
-                        {relLabel} · {inv.peer_email}
+                        {inv.peer_email}
                       </div>
                     </div>
-                    {submitted ? (
-                      <span className="text-[11px] font-bold text-brand-green">Done</span>
-                    ) : (
-                      <button
-                        onClick={() => copyLink(inv.surveyUrl)}
-                        className="text-[11px] font-bold text-brand-purple hover:underline whitespace-nowrap"
-                      >
-                        {copied === inv.surveyUrl ? '✓ Copied' : 'Copy link'}
-                      </button>
-                    )}
+                    <span className={`text-[11px] font-bold whitespace-nowrap ${submitted ? 'text-brand-green' : 'text-muted-foreground'}`}>
+                      {submitted ? 'Done' : 'Pending'}
+                    </span>
                   </div>
                 )
               })}

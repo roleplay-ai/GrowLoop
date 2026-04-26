@@ -19,7 +19,6 @@ import { Send, Sparkles, Square, AlertTriangle, X, LogOut, ArrowRight } from 'lu
 import Markdown from './Markdown'
 import ToolUseCard, { ToolEvent } from './ToolUseCard'
 import ConversationSummaryModal from './ConversationSummaryModal'
-import Link from 'next/link'
 import { countCaptured, type IntelProfile } from '@/lib/agent/slots'
 
 interface Props {

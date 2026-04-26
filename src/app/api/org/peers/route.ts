@@ -6,7 +6,7 @@
 // manager — relation is captured separately on the invite.
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -38,7 +38,11 @@ export async function GET() {
       return NextResponse.json({ peers: [] })
     }
 
-    const { data: rows, error } = await supabase
+    // Use the service client so RLS on the users table doesn't block
+    // participants from reading their org directory. The user's identity and
+    // org membership are already validated above; this is a read-only lookup.
+    const service = await createServiceClient()
+    const { data: rows, error } = await service
       .from('users')
       .select('id, name, email, title, func, role, avatar_emoji, avatar_color, status')
       .eq('org_id', me.org_id)

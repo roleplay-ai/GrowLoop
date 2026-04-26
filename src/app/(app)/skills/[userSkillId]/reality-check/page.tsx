@@ -1,13 +1,11 @@
 // src/app/(app)/skills/[userSkillId]/reality-check/page.tsx
 //
 // Dedicated Reality Check tab. Server-fetches the open round + invites and
-// passes everything to the client orchestrator. If the user is in 'pre' phase
-// the page nudges them to chat first; if they're in 'post' phase it redirects
-// to the results view.
+// passes everything to the client orchestrator. If the round is already closed
+// (phase = 'post') it redirects to the results view.
 
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
-import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { SkillDimension } from '@/lib/types'
 import RealityCheckOrchestrator, {
@@ -46,29 +44,9 @@ export default async function RealityCheckPage({ params }: Props) {
     redirect(`/skills/${userSkillId}/results`)
   }
 
-  if (userSkill.phase === 'pre') {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-        <span className="text-5xl mb-4">📈</span>
-        <h2 className="text-lg font-bold text-brand-dark mb-2">
-          Chat with your coach first
-        </h2>
-        <p className="text-sm text-muted-foreground max-w-sm mb-6 leading-relaxed">
-          Your AI coach will get context on your role and goals before kicking off the
-          Reality Check. Once they suggest it, head back here.
-        </p>
-        <Link
-          href={`/skills/${userSkillId}/chat`}
-          className="px-5 py-3 rounded-xl bg-brand-purple text-white text-sm font-black
-                     hover:bg-brand-purple/90 transition-all"
-        >
-          💬 Open chat
-        </Link>
-      </div>
-    )
-  }
-
-  // Phase = 'training' from here on. Supabase returns joined relationships
+  // Phase = 'pre' or 'training' both reach the orchestrator.
+  // The self-rate API transitions pre → training automatically.
+  // Supabase returns joined relationships
   // as a singleton or array depending on cardinality inference; cast through
   // any to match the codebase pattern (see chat/page.tsx).
   const skill = userSkill.skill as unknown as
