@@ -51,11 +51,11 @@ export default async function SkillsPage() {
   const service = await createServiceClient()
 
   let platformQuery = service
-    .from('org_skills')
-    .select('skill:skills(id, name, icon, description)')
-    .eq('org_id', profile?.org_id)
-    .eq('enabled', true)
-    .not('skill_id', 'in', `(${excludeParam})`)
+    .from('skills')
+    .select('id, name, icon, description')
+    .eq('source', 'platform')
+    .eq('is_archived', false)
+    .not('id', 'in', `(${excludeParam})`)
 
   let customQuery = service
     .from('skills')
@@ -66,7 +66,7 @@ export default async function SkillsPage() {
     .not('id', 'in', `(${excludeParam})`)
 
   if (allowedSkillIds.length > 0) {
-    platformQuery = platformQuery.in('skill_id', allowedSkillIds)
+    platformQuery = platformQuery.in('id', allowedSkillIds)
     customQuery = customQuery.in('id', allowedSkillIds)
   }
 
@@ -76,7 +76,7 @@ export default async function SkillsPage() {
   ])
 
   const allAvailableSkills = [
-    ...(platformSkills ?? []).map((s: any) => s.skill).filter(Boolean),
+    ...(platformSkills ?? []),
     ...(orgCustomSkills ?? []),
   ]
 

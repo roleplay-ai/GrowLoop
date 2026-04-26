@@ -24,6 +24,8 @@ import {
   ChevronUp,
   AlertCircle,
   UserPlus,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface Group {
@@ -59,8 +61,23 @@ interface Props {
 
 type ActiveTab = 'members' | 'skills'
 
+type Toast = { message: string; type: 'success' | 'warning' }
+
 export default function GroupsManager({ groups, participants, enabledSkills }: Props) {
   const router = useRouter()
+
+  // Toast
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  function showToast(message: string, type: Toast['type'] = 'success') {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  function refreshAfterToast() {
+    // Short delay so the toast renders before the server re-fetch
+    setTimeout(() => router.refresh(), 800)
+  }
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
@@ -78,6 +95,11 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
   const [addingToGroup, setAddingToGroup] = useState<string | null>(null)
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [memberSearch, setMemberSearch] = useState('')
+  // Conflict warning state
+  const [conflictInfo, setConflictInfo] = useState<{
+    groupId: string
+    conflicts: { id: string; name: string; fromGroup: string }[]
+  } | null>(null)
 
   // Skills state
   const [skillSearch, setSkillSearch] = useState('')
@@ -85,6 +107,16 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
   const [savingSkillsFor, setSavingSkillsFor] = useState<string | null>(null)
 
   const participantMap = new Map(participants.map(p => [p.id, p]))
+
+  // Map each userId → which group they currently belong to
+  const userGroupMap = new Map<string, string>()
+  const groupNameMap = new Map<string, string>()
+  for (const g of groups) {
+    groupNameMap.set(g.id, g.name)
+    for (const m of g.group_members) {
+      userGroupMap.set(m.user_id, g.id)
+    }
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -165,7 +197,8 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
       return
     }
     closeModal()
-    router.refresh()
+    showToast(editGroup ? 'Group updated successfully' : 'Group created successfully')
+    refreshAfterToast()
   }
 
   async function handleDelete(group: Group) {
@@ -175,17 +208,42 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
     else router.refresh()
   }
 
-  async function handleAddMembers(groupId: string) {
+  function handleAddMembersClick(groupId: string) {
     if (selectedUserIds.length === 0) return
-    const result =
-      selectedUserIds.length === 1
-        ? await addParticipantToGroup(groupId, selectedUserIds[0])
-        : await addParticipantsToGroup(groupId, selectedUserIds)
-    if (!result.success) { alert(result.error ?? 'Failed to add members'); return }
+
+    // Check if any selected users are already in a different group
+    const conflicts = selectedUserIds
+      .map(id => {
+        const existingGroupId = userGroupMap.get(id)
+        if (existingGroupId && existingGroupId !== groupId) {
+          const p = participantMap.get(id)
+          return {
+            id,
+            name: p?.name ?? id,
+            fromGroup: groupNameMap.get(existingGroupId) ?? 'another group',
+          }
+        }
+        return null
+      })
+      .filter(Boolean) as { id: string; name: string; fromGroup: string }[]
+
+    if (conflicts.length > 0) {
+      setConflictInfo({ groupId, conflicts })
+    } else {
+      doAddMembers(groupId, selectedUserIds)
+    }
+  }
+
+  async function doAddMembers(groupId: string, userIds: string[]) {
+    setConflictInfo(null)
+    const result = await addParticipantsToGroup(groupId, userIds)
+    if (!result.success) { showToast(result.error ?? 'Failed to add members', 'warning'); return }
     setAddingToGroup(null)
     setSelectedUserIds([])
     setMemberSearch('')
-    router.refresh()
+    const count = (result as any).added ?? userIds.length
+    showToast(`${count} participant${count !== 1 ? 's' : ''} added to group`)
+    refreshAfterToast()
   }
 
   async function handleRemoveMember(groupId: string, userId: string) {
@@ -198,8 +256,13 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
     setSavingSkillsFor(groupId)
     const result = await setGroupVisibleSkills(groupId, skillsDraft[groupId] ?? [])
     setSavingSkillsFor(null)
-    if (!result.success) alert(result.error ?? 'Failed to save skills')
-    else router.refresh()
+    if (!result.success) {
+      showToast(result.error ?? 'Failed to save skills', 'warning')
+      return
+    }
+    const count = (result as any).skillIds?.length ?? 0
+    showToast(`Skills updated — ${count} skill${count !== 1 ? 's' : ''} visible to this group`)
+    refreshAfterToast()
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -510,7 +573,7 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
 
                           <div className="flex gap-2 pt-1">
                             <button
-                              onClick={() => handleAddMembers(group.id)}
+                              onClick={() => handleAddMembersClick(group.id)}
                               disabled={selectedUserIds.length === 0}
                               className="flex-1 px-3 py-2 rounded-lg bg-brand-dark text-white text-xs font-black hover:bg-brand-dark/90 disabled:opacity-40 transition-all"
                             >
@@ -669,6 +732,64 @@ export default function GroupsManager({ groups, participants, enabledSkills }: P
           )
         })}
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold transition-all animate-fade-up ${
+            toast.type === 'success'
+              ? 'bg-white border-brand-green/30 text-brand-dark'
+              : 'bg-white border-red-200 text-brand-dark'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-brand-green flex-shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 text-brand-orange flex-shrink-0" />
+          )}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Conflict warning modal */}
+      {conflictInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/70 backdrop-blur-sm p-4 animate-fade-up">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-card-border overflow-hidden">
+            <div className="px-6 py-5 border-b border-card-border flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-brand-orange/10 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-4 h-4 text-brand-orange" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-brand-dark">Already in another group</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">These participants will be moved.</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 space-y-2 max-h-48 overflow-y-auto">
+              {conflictInfo.conflicts.map(c => (
+                <div key={c.id} className="flex items-center gap-2.5 text-xs">
+                  <span className="font-semibold text-brand-dark">{c.name}</span>
+                  <span className="text-muted-foreground">→ currently in</span>
+                  <span className="font-bold text-brand-orange">{c.fromGroup}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-card-border bg-brand-cream/30 flex gap-2 justify-end">
+              <button
+                onClick={() => setConflictInfo(null)}
+                className="px-4 py-2 rounded-lg text-xs font-bold text-brand-dark hover:bg-white border border-card-border transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => doAddMembers(conflictInfo.groupId, selectedUserIds)}
+                className="px-5 py-2 rounded-lg bg-brand-dark text-white text-xs font-black hover:bg-brand-dark/90 transition-all shadow-md"
+              >
+                Move to this group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       {modalOpen && (

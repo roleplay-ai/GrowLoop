@@ -1,7 +1,7 @@
 // src/app/(app)/skills/explore/[skillId]/page.tsx
 // Skill preview page before enrollment
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
 import SkillPreview from '@/components/skills/SkillPreview'
@@ -46,15 +46,23 @@ export default async function SkillDetailPage({ params }: Props) {
     .eq('id', user.id)
     .single()
 
-  // Check if skill is enabled for user's org
-  const { data: orgSkill } = await supabase
-    .from('org_skills')
-    .select('enabled')
-    .eq('org_id', profile?.org_id)
-    .eq('skill_id', skillId)
-    .single()
+  const orgId = profile?.org_id
 
-  if (!orgSkill?.enabled) {
+  // Access check depends on skill source:
+  // - Platform skills: must appear in org_skills for the user's org
+  // - Org-custom skills: must belong directly to the user's org
+  if (skill.source === 'platform') {
+    const service = await createServiceClient()
+    const { data: orgSkill } = await service
+      .from('org_skills')
+      .select('skill_id')
+      .eq('org_id', orgId)
+      .eq('skill_id', skillId)
+      .maybeSingle()
+    if (!orgSkill) notFound()
+  } else if (skill.source === 'org_custom') {
+    if (skill.org_id !== orgId || skill.is_archived) notFound()
+  } else {
     notFound()
   }
 

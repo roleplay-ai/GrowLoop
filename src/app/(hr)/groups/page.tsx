@@ -15,7 +15,7 @@ export default async function GroupsPage() {
 
   const service = await createServiceClient()
 
-  const [{ data: groups }, { data: participants }, { data: platformSkillRows }, { data: orgCustomSkills }] = await Promise.all([
+  const [{ data: groups }, { data: participants }, { data: platformSkills }, { data: orgCustomSkills }] = await Promise.all([
     supabase
       .from('groups')
       .select('*, group_members(user_id)')
@@ -29,10 +29,11 @@ export default async function GroupsPage() {
       .eq('status', 'active')
       .order('name'),
     service
-      .from('org_skills')
-      .select('skill:skills(id, name, icon, description)')
-      .eq('org_id', profile?.org_id)
-      .eq('enabled', true),
+      .from('skills')
+      .select('id, name, icon, description')
+      .eq('source', 'platform')
+      .eq('is_archived', false)
+      .order('name'),
     service
       .from('skills')
       .select('id, name, icon, description')
@@ -43,7 +44,7 @@ export default async function GroupsPage() {
   ])
 
   const enabledSkills = [
-    ...(platformSkillRows ?? []).map((r: any) => r.skill).filter(Boolean),
+    ...(platformSkills ?? []),
     ...(orgCustomSkills ?? []),
   ]
 

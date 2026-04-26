@@ -44,15 +44,35 @@ export async function enrollInSkill(skillId: string): Promise<EnrollResult> {
     return { success: false, error: 'This skill is not available for your group' }
   }
 
-  // Check if skill is enabled for user's org
-  const { data: orgSkill } = await supabase
-    .from('org_skills')
-    .select('enabled')
-    .eq('org_id', profile.org_id)
-    .eq('skill_id', skillId)
-    .single()
+  // Verify the skill is accessible for this org
+  const serviceClient = await createServiceClient()
+  const { data: skill } = await serviceClient
+    .from('skills')
+    .select('id, source, org_id, is_archived')
+    .eq('id', skillId)
+    .maybeSingle()
 
-  if (!orgSkill?.enabled) {
+  if (!skill || skill.is_archived) {
+    return { success: false, error: 'Skill not found' }
+  }
+
+  if (skill.source === 'platform') {
+    // Platform skills: must have an org_skills row for this org
+    const { data: orgSkill } = await serviceClient
+      .from('org_skills')
+      .select('skill_id')
+      .eq('org_id', profile.org_id)
+      .eq('skill_id', skillId)
+      .maybeSingle()
+    if (!orgSkill) {
+      return { success: false, error: 'Skill not available for your organization' }
+    }
+  } else if (skill.source === 'org_custom') {
+    // Org-custom skills: must belong directly to the user's org
+    if (skill.org_id !== profile.org_id) {
+      return { success: false, error: 'Skill not available for your organization' }
+    }
+  } else {
     return { success: false, error: 'Skill not available for your organization' }
   }
 
@@ -87,7 +107,6 @@ export async function enrollInSkill(skillId: string): Promise<EnrollResult> {
   }
 
   // Write to audit log
-  const serviceClient = await createServiceClient()
   await serviceClient.from('audit_log').insert({
     org_id: profile.org_id,
     actor_id: user.id,
