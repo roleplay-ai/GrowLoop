@@ -9,17 +9,13 @@ import {
   ArchiveRestore,
   Copy,
   Layers,
-  Power,
-  PowerOff,
   Sparkles,
   Building2,
-  CheckCircle2,
   Eye,
 } from 'lucide-react'
 import SkillEditorModal from '@/components/skills/SkillEditorModal'
 import {
   cloneSkillToOrg,
-  setPlatformSkillEnabled,
   createOrgSkill,
   updateOrgSkill,
   archiveOrgSkill,
@@ -31,7 +27,6 @@ interface PlatformSkill {
   icon: string | null
   description: string | null
   dimensions: any[] | null
-  enabled: boolean
 }
 
 interface OrgSkill {
@@ -61,6 +56,7 @@ export default function HRSkillsBrowser({
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<OrgSkill | null>(null)
   const [viewer, setViewer] = useState<PlatformSkill | null>(null)
+  const [cloneSuccess, setCloneSuccess] = useState<string | null>(null)
 
   const filteredPlatform = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -82,20 +78,9 @@ export default function HRSkillsBrowser({
     )
   }, [orgSkills, query])
 
-  const enabledCount = platform.filter((s) => s.enabled).length
-
-  async function handleToggleEnabled(s: PlatformSkill) {
-    setPendingId(s.id)
-    const res = await setPlatformSkillEnabled(s.id, !s.enabled)
-    setPendingId(null)
-    if (!res.success) alert(res.error ?? 'Failed to update')
-  }
-
   async function handleClone(s: PlatformSkill) {
     if (
-      !confirm(
-        `Clone "${s.name}" to your org's catalogue? You'll be able to edit dimensions and rubric.`,
-      )
+      !confirm(`Clone "${s.name}" to your org's catalogue? You'll be able to customise it.`)
     )
       return
     setPendingId(s.id)
@@ -105,6 +90,8 @@ export default function HRSkillsBrowser({
       alert(res.error ?? 'Failed to clone')
       return
     }
+    setCloneSuccess(s.name)
+    setTimeout(() => setCloneSuccess(null), 3000)
     setTab('org')
   }
 
@@ -128,19 +115,21 @@ export default function HRSkillsBrowser({
 
   return (
     <div className="space-y-5">
+      {/* Clone success toast */}
+      {cloneSuccess && (
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-brand-green/10 border border-brand-green/30 text-brand-green text-xs font-semibold">
+          <span className="text-base">✓</span>
+          <span>"{cloneSuccess}" cloned to Your Skills — you can now edit and assign it.</span>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Stat
           icon={<Sparkles className="w-4 h-4" />}
           label="Platform skills"
           value={platform.length}
           tint="text-brand-purple bg-brand-purple/10"
-        />
-        <Stat
-          icon={<CheckCircle2 className="w-4 h-4" />}
-          label="Enabled for org"
-          value={enabledCount}
-          tint="text-brand-green bg-brand-green/10"
         />
         <Stat
           icon={<Building2 className="w-4 h-4" />}
@@ -222,7 +211,6 @@ export default function HRSkillsBrowser({
         <PlatformList
           skills={filteredPlatform}
           pendingId={pendingId}
-          onToggleEnabled={handleToggleEnabled}
           onClone={handleClone}
           onView={(s) => setViewer(s)}
         />
@@ -289,13 +277,11 @@ function Stat({
 function PlatformList({
   skills,
   pendingId,
-  onToggleEnabled,
   onClone,
   onView,
 }: {
   skills: PlatformSkill[]
   pendingId: string | null
-  onToggleEnabled: (s: PlatformSkill) => void
   onClone: (s: PlatformSkill) => void
   onView: (s: PlatformSkill) => void
 }) {
@@ -316,14 +302,7 @@ function PlatformList({
               {s.icon ?? '🧠'}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-black text-brand-dark truncate">{s.name}</h3>
-                {s.enabled && (
-                  <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-green/15 text-brand-green border border-brand-green/25">
-                    On
-                  </span>
-                )}
-              </div>
+              <h3 className="text-sm font-black text-brand-dark truncate">{s.name}</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
                 {s.description?.trim() || (
                   <span className="italic text-muted-foreground/50">No description</span>
@@ -336,32 +315,26 @@ function PlatformList({
               <Layers className="w-3 h-3" />
               {s.dimensions?.length ?? 0} dim
             </div>
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-purple/10 text-brand-purple border border-brand-purple/20">
+              Platform
+            </span>
           </div>
           <div className="flex items-center gap-1.5 pt-1">
             <button
-              onClick={() => onToggleEnabled(s)}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-bold border transition-colors ${
-                s.enabled
-                  ? 'text-brand-green border-brand-green/30 bg-brand-green/5 hover:bg-brand-green/10'
-                  : 'text-brand-dark border-card-border hover:border-brand-green/40 hover:bg-brand-green/5'
-              }`}
-            >
-              {s.enabled ? <Power className="w-3 h-3" /> : <PowerOff className="w-3 h-3" />}
-              {s.enabled ? 'Enabled' : 'Enable'}
-            </button>
-            <button
               onClick={() => onView(s)}
-              className="px-2 py-1.5 rounded-md text-[11px] font-bold text-brand-dark border border-card-border hover:border-brand-purple/40 hover:bg-brand-purple/5 transition-colors"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-bold text-brand-dark border border-card-border hover:border-brand-purple/40 hover:bg-brand-purple/5 transition-colors"
               title="Preview"
             >
               <Eye className="w-3 h-3" />
+              Preview
             </button>
             <button
               onClick={() => onClone(s)}
-              className="px-2 py-1.5 rounded-md text-[11px] font-bold text-brand-dark border border-card-border hover:border-brand-purple/40 hover:bg-brand-purple/5 transition-colors"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-bold text-brand-dark border border-card-border hover:border-brand-purple/40 hover:bg-brand-purple/5 transition-colors"
               title="Clone & customise"
             >
               <Copy className="w-3 h-3" />
+              Clone
             </button>
           </div>
         </div>

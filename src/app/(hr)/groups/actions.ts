@@ -152,40 +152,7 @@ export async function deleteGroup(groupId: string) {
 }
 
 export async function addParticipantToGroup(groupId: string, userId: string) {
-  const supabase = await createClient()
-  const serviceClient = await createServiceClient()
-
-  const { error: authError, user: actor, orgId } = await verifyHR(supabase)
-  if (authError) return { success: false, error: authError }
-
-  // Verify both group and user belong to the HR's org
-  const [{ data: group }, { data: targetUser }] = await Promise.all([
-    serviceClient.from('groups').select('org_id').eq('id', groupId).single(),
-    serviceClient.from('users').select('org_id, role').eq('id', userId).single(),
-  ])
-
-  if (!group || group.org_id !== orgId) {
-    return { success: false, error: 'Group not found' }
-  }
-
-  if (!targetUser || targetUser.org_id !== orgId || targetUser.role !== 'participant') {
-    return { success: false, error: 'Participant not found' }
-  }
-
-  const { error } = await serviceClient
-    .from('group_members')
-    .insert({ group_id: groupId, user_id: userId })
-
-  if (error && !error.message.includes('duplicate')) {
-    return { success: false, error: error.message }
-  }
-
-  await insertAuditLog(serviceClient, 'add_to_group', 'group', groupId, actor!.id, {
-    user_id: userId,
-  })
-
-  revalidatePath('/groups')
-  return { success: true }
+  return addParticipantsToGroup(groupId, [userId])
 }
 
 export async function addParticipantsToGroup(groupId: string, userIds: string[]) {
@@ -221,20 +188,25 @@ export async function addParticipantsToGroup(groupId: string, userIds: string[])
     return { success: false, error: 'No valid participants found' }
   }
 
+  // Remove from any other groups first (single-group constraint)
+  await serviceClient
+    .from('group_members')
+    .delete()
+    .in('user_id', validIds)
+    .neq('group_id', groupId)
+
+  // Add to the target group
   const { error } = await serviceClient
     .from('group_members')
-    .upsert(validIds.map((id: string) => ({ group_id: groupId, user_id: id })), {
-      onConflict: 'group_id,user_id',
-      ignoreDuplicates: true,
-    })
+    .upsert(
+      validIds.map((id: string) => ({ group_id: groupId, user_id: id })),
+      { onConflict: 'group_id,user_id', ignoreDuplicates: true },
+    )
 
-  if (error) {
-    return { success: false, error: error.message }
-  }
+  if (error) return { success: false, error: error.message }
 
   await insertAuditLog(serviceClient, 'add_to_group_bulk', 'group', groupId, actor!.id, {
     user_ids: validIds,
-    requested: userIds,
   })
 
   revalidatePath('/groups')
@@ -258,14 +230,25 @@ export async function setGroupVisibleSkills(groupId: string, skillIds: string[])
     return { success: false, error: 'Group not found' }
   }
 
-  // Defense-in-depth: only allow skills enabled for this org (or platform skills that are enabled via org_skills)
-  const { data: allowed } = await serviceClient
-    .from('org_skills')
-    .select('skill_id')
-    .eq('org_id', orgId)
-    .eq('enabled', true)
+  // Allow any non-archived platform skill, plus this org's custom skills
+  const [{ data: platformSkills }, { data: customSkills }] = await Promise.all([
+    serviceClient
+      .from('skills')
+      .select('id')
+      .eq('source', 'platform')
+      .eq('is_archived', false),
+    serviceClient
+      .from('skills')
+      .select('id')
+      .eq('source', 'org_custom')
+      .eq('org_id', orgId)
+      .eq('is_archived', false),
+  ])
 
-  const allowedSet = new Set((allowed ?? []).map((r: any) => r.skill_id))
+  const allowedSet = new Set([
+    ...(platformSkills ?? []).map((r: any) => r.id),
+    ...(customSkills ?? []).map((r: any) => r.id),
+  ])
   const sanitized = (skillIds ?? []).filter((id) => allowedSet.has(id))
 
   const { error } = await serviceClient
