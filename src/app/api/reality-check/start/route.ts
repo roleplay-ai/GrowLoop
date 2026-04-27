@@ -191,11 +191,10 @@ export async function POST(req: NextRequest) {
           fresh.map((p) => ({
             reality_check_id: openRound!.id,
             peer_email: p.email.toLowerCase(),
-            peer_name: p.name,
             peer_relation: p.relation,
           })),
         )
-        .select('id, peer_email, peer_name, peer_relation, token')
+        .select('id, peer_email, peer_relation, token')
 
       if (invErr || !inserted) {
         console.error('[rc/start] invites insert failed:', invErr)
@@ -207,6 +206,7 @@ export async function POST(req: NextRequest) {
 
       invites = inserted.map((i) => ({
         ...i,
+        peer_name: null,
         surveyUrl: buildSurveyUrl(req, i.token),
       }))
     }
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
     // a consistent view (newly added + previously added).
     const { data: allInvites } = await supabase
       .from('peer_invites')
-      .select('id, peer_email, peer_name, peer_relation, token, status, submitted_at')
+      .select('id, peer_email, peer_relation, token, status, submitted_at')
       .eq('reality_check_id', openRound.id)
       .order('sent_at', { ascending: true })
 
@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
       invites: (allInvites ?? []).map((i) => ({
         id: i.id,
         peer_email: i.peer_email,
-        peer_name: i.peer_name,
+        peer_name: null,
         peer_relation: i.peer_relation,
         token: i.token,
         status: i.status,

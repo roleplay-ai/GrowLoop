@@ -5,6 +5,7 @@
 // either an error state, an "already submitted" thank-you, or the rating form.
 
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { createServiceClient } from '@/lib/supabase/server'
 import type { SkillDimension } from '@/lib/types'
 import PeerSurveyForm from './PeerSurveyForm'
@@ -125,9 +126,19 @@ function SurveyShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-brand-cream flex flex-col">
       <header className="px-6 py-4 border-b border-card-border bg-white">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🌱</span>
-            <span className="font-black text-brand-dark">Nudgeable</span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/rate-colleagues"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-brand-dark transition-colors"
+            >
+              <span>←</span>
+              <span>Back</span>
+            </Link>
+            <div className="w-px h-4 bg-card-border" />
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🌱</span>
+              <span className="font-black text-brand-dark">Nudgeable</span>
+            </div>
           </div>
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-purple bg-brand-purple/10 px-2.5 py-1 rounded-full">
             Anonymous
