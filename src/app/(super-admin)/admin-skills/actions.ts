@@ -13,7 +13,7 @@ import { randomUUID } from 'crypto'
 // ── Validation ──────────────────────────────────────────────────────────────
 const dimensionSchema = z.object({
   id: z.string(),
-  name: z.string().min(2, 'Dimension name must be at least 2 chars').max(60),
+  name: z.string().min(2, 'Dimension name must be at least 2 chars').max(1000),
   description: z.string().max(500).optional().default(''),
   rubric: z
     .object({
@@ -28,10 +28,10 @@ const dimensionSchema = z.object({
 })
 
 const skillSchema = z.object({
-  name: z.string().min(2, 'Name must be 2-60 characters').max(60),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(200),
   icon: z.string().max(8).optional().default('🧠'),
   description: z.string().max(1000).optional().default(''),
-  dimensions: z.array(dimensionSchema).max(6, 'Up to 6 dimensions allowed').default([]),
+  dimensions: z.array(dimensionSchema).max(10, 'Up to 10 dimensions allowed').default([]),
 })
 
 export type SkillFormPayload = z.infer<typeof skillSchema>

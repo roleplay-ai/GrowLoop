@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto'
 
 const dimensionSchema = z.object({
   id: z.string(),
-  name: z.string().min(2).max(60),
+  name: z.string().min(2).max(1000),
   description: z.string().max(500).optional().default(''),
   rubric: z
     .object({
@@ -30,10 +30,10 @@ const dimensionSchema = z.object({
 })
 
 const skillSchema = z.object({
-  name: z.string().min(2).max(60),
+  name: z.string().min(2).max(200),
   icon: z.string().max(8).optional().default('🧠'),
   description: z.string().max(1000).optional().default(''),
-  dimensions: z.array(dimensionSchema).max(6).default([]),
+  dimensions: z.array(dimensionSchema).max(10).default([]),
 })
 
 async function verifyHR(supabase: any) {
