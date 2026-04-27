@@ -109,6 +109,8 @@ export default function SkillEditorModal({
     setDimensions((d) => d.map((x) => (x.id === id ? { ...x, ...patch } : x)))
   }
 
+  const MAX_DIMENSIONS = 10
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -117,9 +119,18 @@ export default function SkillEditorModal({
       setError('Skill name must be at least 2 characters')
       return
     }
+    if (dimensions.length > MAX_DIMENSIONS) {
+      setError(`Maximum ${MAX_DIMENSIONS} dimensions allowed`)
+      return
+    }
     const incompleteDim = dimensions.find((d) => !d.name.trim())
     if (incompleteDim) {
       setError('All dimensions need a name')
+      return
+    }
+    const longDim = dimensions.find((d) => d.name.trim().length > 1000)
+    if (longDim) {
+      setError('Dimension name cannot exceed 1000 characters')
       return
     }
 
@@ -199,9 +210,8 @@ export default function SkillEditorModal({
                           setIcon(e)
                           setShowEmojiPicker(false)
                         }}
-                        className={`w-8 h-8 rounded-md flex items-center justify-center text-lg hover:bg-brand-cream transition-colors ${
-                          icon === e ? 'bg-brand-purple/10' : ''
-                        }`}
+                        className={`w-8 h-8 rounded-md flex items-center justify-center text-lg hover:bg-brand-cream transition-colors ${icon === e ? 'bg-brand-purple/10' : ''
+                          }`}
                       >
                         {e}
                       </button>
@@ -257,7 +267,8 @@ export default function SkillEditorModal({
                 <button
                   type="button"
                   onClick={addDimension}
-                  className="text-xs font-bold text-brand-purple hover:bg-brand-purple/5 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                  disabled={dimensions.length >= MAX_DIMENSIONS}
+                  className="text-xs font-bold text-brand-purple hover:bg-brand-purple/5 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Add dimension
@@ -289,7 +300,7 @@ export default function SkillEditorModal({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-card-border flex items-center justify-between bg-brand-cream/30 flex-shrink-0">
             <p className="text-[10px] text-muted-foreground/70 font-mono">
-              {dimensions.length} dimension{dimensions.length === 1 ? '' : 's'} · each rated 1–5
+              {dimensions.length} / {MAX_DIMENSIONS} dimension{dimensions.length === 1 ? '' : 's'} · each rated 1–5
             </p>
             <div className="flex gap-2">
               <button
@@ -330,36 +341,41 @@ function DimensionCard({
   onUpdate: (p: Partial<Dimension>) => void
 }) {
   return (
-    <div className="flex items-center gap-2 border border-card-border rounded-xl bg-white px-3 py-2.5">
-      <span className="w-6 h-6 rounded-md bg-brand-purple/10 text-brand-purple text-[10px] font-black flex items-center justify-center flex-shrink-0">
-        {index + 1}
-      </span>
-      <input
-        type="text"
+    <div className="border border-card-border rounded-xl bg-white px-3 py-2.5 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="w-6 h-6 rounded-md bg-brand-purple/10 text-brand-purple text-[10px] font-black flex items-center justify-center flex-shrink-0">
+          {index + 1}
+        </span>
+        <span className="flex items-center gap-0.5 ml-auto flex-shrink-0">
+          {(['1', '2', '3', '4', '5'] as const).map((lvl) => (
+            <span
+              key={lvl}
+              className="w-5 h-5 rounded bg-brand-yellow/15 text-brand-dark text-[9px] font-black flex items-center justify-center"
+            >
+              {lvl}
+            </span>
+          ))}
+        </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="w-7 h-7 rounded-md hover:bg-brand-red/10 hover:text-brand-red flex items-center justify-center text-muted-foreground transition-colors flex-shrink-0"
+          aria-label="Remove dimension"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <textarea
         value={dim.name}
         onChange={(e) => onUpdate({ name: e.target.value })}
-        placeholder="Dimension name (e.g. Active listening)"
-        maxLength={80}
-        className="flex-1 px-2 py-1 text-sm font-bold text-brand-dark bg-transparent placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/30 rounded-md"
+        placeholder="Dimension name or description (e.g. Active listening — the ability to…)"
+        maxLength={1000}
+        rows={2}
+        className="w-full px-2 py-1.5 text-sm font-bold text-brand-dark bg-transparent placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/30 rounded-md resize-none"
       />
-      <span className="flex items-center gap-0.5 flex-shrink-0">
-        {(['1', '2', '3', '4', '5'] as const).map((lvl) => (
-          <span
-            key={lvl}
-            className="w-5 h-5 rounded bg-brand-yellow/15 text-brand-dark text-[9px] font-black flex items-center justify-center"
-          >
-            {lvl}
-          </span>
-        ))}
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="w-7 h-7 rounded-md hover:bg-brand-red/10 hover:text-brand-red flex items-center justify-center text-muted-foreground transition-colors flex-shrink-0"
-        aria-label="Remove dimension"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      <div className="text-right text-[10px] text-muted-foreground/40 font-mono">
+        {dim.name.length} / 1000
+      </div>
     </div>
   )
 }
